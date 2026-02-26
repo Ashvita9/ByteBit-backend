@@ -12,6 +12,8 @@ dataclasses==0.6
 Django==6.0.2
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
+djangorestframework-simplejwt
+django-rest-framework-mongoengine
 djongo==1.2.31
 dnspython==2.8.0
 gunicorn
@@ -27,6 +29,7 @@ pycparser==3.0
 pymongo==4.16.0
 pyOpenSSL==25.3.0
 python-dotenv==1.2.1
+redis
 service-identity==24.2.0
 sqlparse==0.5.5
 Twisted==25.5.0
@@ -34,6 +37,6 @@ txaio==25.12.2
 typing_extensions==4.15.0
 tzdata==2025.3
 ujson==5.11.0
+whitenoise
 zope.interface==8.2
 mongoengine
-djangorestframework-simplejwt

@@ -1,12 +1,16 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from .health import health_check
 
 router = DefaultRouter()
 router.register(r'tasks', views.CodingTaskViewSet, basename='codingtask')
 
 urlpatterns = [
     path('', include(router.urls)),
+
+    # Health Check
+    path('health/',                health_check,                           name='health-check'),
 
     # Auth
     path('auth/register/',         views.UserRegistrationView.as_view(),  name='register'),
