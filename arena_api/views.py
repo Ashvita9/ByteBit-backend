@@ -1058,3 +1058,31 @@ def admin_announcements(request):
             'isPinned': p.isPinned
         }, status=201)
 
+
+# ── Public Announcements (for students/teachers) ────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def public_announcements(request):
+    """GET /api/announcements/ — returns announcements visible to the current user's role."""
+    user_role = 'STUDENT'
+    try:
+        prof = CoderProfile.objects.get(user_id=str(request.user.id))
+        user_role = prof.role
+    except Exception:
+        if request.user.is_superuser:
+            user_role = 'ADMIN'
+
+    posts = GlobalAnnouncement.objects.all().order_by('-isPinned', '-created_at')
+    result = []
+    for p in posts:
+        if p.targetRole == 'ALL' or p.targetRole == user_role:
+            result.append({
+                'id': str(p.id),
+                'title': p.title,
+                'message': p.message,
+                'targetRole': p.targetRole,
+                'isPinned': p.isPinned,
+                'createdAt': p.created_at.isoformat()
+            })
+    return Response(result)
