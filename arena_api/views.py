@@ -801,10 +801,43 @@ def admin_user_action(request, user_id):
         CoderProfile.objects.filter(user_id=user_id).delete()
         return Response({'status': 'deleted'})
     if request.method == 'PATCH':
-        u.is_active = not u.is_active
-        u.save()
-        _log('user_locked' if not u.is_active else 'user_unlocked', request.user, target_user=user_id, details=f'{u.username} {"locked" if not u.is_active else "unlocked"}.')
-        return Response({'status': 'ok', 'is_active': u.is_active})
+        action = request.data.get('action')
+        new_role = request.data.get('role')
+
+        if action == 'reset_password':
+            new_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+            u.set_password(new_password)
+            u.save()
+            _log('password_reset', request.user, target_user=user_id, details=f'Password reset for {u.username}.')
+            return Response({'status': 'ok', 'password': new_password})
+            
+        elif new_role in ['ADMIN', 'TEACHER', 'STUDENT']:
+            # For superusers (ADMIN role)
+            if new_role == 'ADMIN':
+                u.is_superuser = True
+                u.save()
+            else:
+                u.is_superuser = False
+                u.save()
+            
+            # Update CoderProfile role
+            prof = CoderProfile.objects.filter(user_id=u.id).first()
+            if not prof:
+                prof = CoderProfile(user_id=u.id)
+            
+            prof.role = new_role
+            if new_role != 'STUDENT' and prof.rank != 'Not Applicable':
+                prof.rank = 'Not Applicable'
+            prof.save()
+            
+            _log('role_changed', request.user, target_user=user_id, details=f'Role changed to {new_role} for {u.username}.')
+            return Response({'status': 'ok', 'role': new_role})
+            
+        else:
+            u.is_active = not u.is_active
+            u.save()
+            _log('user_locked' if not u.is_active else 'user_unlocked', request.user, target_user=user_id, details=f'{u.username} {"locked" if not u.is_active else "unlocked"}.')
+            return Response({'status': 'ok', 'is_active': u.is_active})
 
 
 # ── ADMIN: Classrooms ────────────────────────────────────────────────────────

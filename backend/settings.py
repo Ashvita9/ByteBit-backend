@@ -74,6 +74,10 @@ CHANNEL_LAYERS = {
             "hosts": [os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1')],
         },
     },
+} if os.environ.get('REDIS_URL') else {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
 }
 
 MIDDLEWARE = [
@@ -107,6 +111,16 @@ TEMPLATES = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_PREFLIGHT_MAX_AGE = 86400
+
+CORS_ALLOWED_ORIGINS = [
+    "https://byte-bit-frontend.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+# Ensure CORS works even if the request origin isn't in the list but ALLOW_ALL is True
+CORS_ALLOW_ALL_ORIGINS = True 
 
 CORS_ALLOW_METHODS = [
     "DELETE",
@@ -151,11 +165,15 @@ DATABASES = {
 }
 
 import mongoengine
-mongoengine.connect(
-    db='codingarena_db',
-    host=os.getenv('MONGO_URI'),
-    alias='default'
-)
+mongo_uri = os.getenv('MONGO_URI') or os.getenv('MONGODB_URI')
+if mongo_uri:
+    mongoengine.connect(
+        db='codingarena_db',
+        host=mongo_uri,
+        alias='default'
+    )
+else:
+    print("WARNING: No MongoDB URI found. Set MONGO_URI or MONGODB_URI.")
 
 
 # Password validation
