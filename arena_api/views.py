@@ -95,7 +95,7 @@ def create_teacher(request):
     user = User.objects.create_user(username=username, email=email, password=password)
     user.is_staff = True
     user.save()
-    CoderProfile(user_id=user.id, role='TEACHER').save()
+    CoderProfile(user_id=str(user.id), role='TEACHER').save()
 
     return Response({
         'message': 'Teacher created successfully',
@@ -108,14 +108,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
         data['username'] = self.user.username
-        data['user_id']  = self.user.id
+        data['user_id']  = str(self.user.id)
 
         if self.user.is_superuser:
             data['role'] = 'ADMIN'
             return data
 
         try:
-            profile      = CoderProfile.objects.get(user_id=self.user.id)
+            profile      = CoderProfile.objects.get(user_id=str(self.user.id))
             data['role'] = profile.role
             data['xp']   = profile.xp
             data['level']  = profile.level
@@ -138,7 +138,7 @@ class CustomLoginView(TokenObtainPairView):
 @permission_classes([permissions.IsAuthenticated])
 def my_profile(request):
     try:
-        profile = CoderProfile.objects.get(user_id=request.user.id)
+        profile = CoderProfile.objects.get(user_id=str(request.user.id))
         data = CoderProfileSerializer(profile).data
         data['username'] = request.user.username
         return Response(data)
@@ -183,7 +183,7 @@ def classrooms(request):
     POST /api/classrooms/      â€” create a new classroom
     """
     if request.method == 'GET':
-        cs = Classroom.objects.filter(teacher_id=request.user.id)
+        cs = Classroom.objects.filter(teacher_id=str(request.user.id))
         return Response([_classroom_data(c) for c in cs])
 
     # POST â€” create
@@ -193,7 +193,7 @@ def classrooms(request):
         return Response({'error': 'name is required'}, status=400)
 
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    c = Classroom(name=name, type=ctype, teacher_id=request.user.id, code=code)
+    c = Classroom(name=name, type=ctype, teacher_id=str(request.user.id), code=code)
     c.save()
     return Response(_classroom_data(c), status=201)
 
@@ -237,7 +237,7 @@ def classroom_detail(request, classroom_id):
         return Response(d)
 
     if request.method == 'PATCH':
-        if c.teacher_id != request.user.id:
+        if str(c.teacher_id) != str(request.user.id):
             return Response({'error': 'Forbidden'}, status=403)
         if 'name' in request.data:
             c.name = request.data['name']
@@ -249,7 +249,7 @@ def classroom_detail(request, classroom_id):
         return Response(_classroom_data(c))
 
     if request.method == 'DELETE':
-        if c.teacher_id != request.user.id:
+        if str(c.teacher_id) != str(request.user.id):
             return Response({'error': 'Forbidden'}, status=403)
         c.delete()
         return Response(status=204)
@@ -275,7 +275,7 @@ def join_classroom(request):
     if c.is_locked:
         return Response({'error': 'This classroom is locked'}, status=403)
 
-    uid = request.user.id
+    uid = str(request.user.id)
     if uid not in c.student_ids:
         c.student_ids.append(uid)
         c.save()
@@ -291,7 +291,7 @@ def my_classrooms(request):
     Students: returns enrolled classrooms + all public unlocked classrooms.
     Teachers/Admins: returns classrooms they own.
     """
-    uid = request.user.id
+    uid = str(request.user.id)
     profile = CoderProfile.objects.filter(user_id=uid).first()
     role = profile.role if profile else 'STUDENT'
 
@@ -327,7 +327,7 @@ def join_public_classroom(request, classroom_id):
     if c.is_locked:
         return Response({'error': 'This classroom is locked'}, status=403)
 
-    uid = request.user.id
+    uid = str(request.user.id)
     if uid not in c.student_ids:
         c.student_ids.append(uid)
         c.save()
@@ -343,10 +343,10 @@ def remove_student(request, classroom_id, student_id):
     except Exception:
         return Response({'error': 'Classroom not found'}, status=404)
 
-    if c.teacher_id != request.user.id:
+    if str(c.teacher_id) != str(request.user.id):
         return Response({'error': 'Forbidden'}, status=403)
 
-    sid = int(student_id)
+    sid = str(student_id)
     if sid in c.student_ids:
         c.student_ids.remove(sid)
         c.save()
@@ -365,7 +365,7 @@ def add_student_by_username(request, classroom_id):
     except Exception:
         return Response({'error': 'Classroom not found'}, status=404)
 
-    if c.teacher_id != request.user.id:
+    if str(c.teacher_id) != str(request.user.id):
         return Response({'error': 'Forbidden'}, status=403)
 
     username = request.data.get('username', '').strip()
@@ -374,10 +374,10 @@ def add_student_by_username(request, classroom_id):
     except User.DoesNotExist:
         return Response({'error': f'User "{username}" not found'}, status=404)
 
-    if u.id not in c.student_ids:
-        c.student_ids.append(u.id)
+    if str(u.id) not in c.student_ids:
+        c.student_ids.append(str(u.id))
         c.save()
-    return Response({'status': 'added', 'username': u.username, 'user_id': u.id})
+    return Response({'status': 'added', 'username': u.username, 'user_id': str(u.id)})
 
 
 # â”€â”€ Announcements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -391,7 +391,7 @@ def post_announcement(request, classroom_id):
     except Exception:
         return Response({'error': 'Classroom not found'}, status=404)
 
-    if c.teacher_id != request.user.id:
+    if str(c.teacher_id) != str(request.user.id):
         return Response({'error': 'Forbidden'}, status=403)
 
     message = request.data.get('message', '').strip()
@@ -434,8 +434,8 @@ def tickets(request, classroom_id):
         return Response({'error': 'student_id, task_id, and reason are required'}, status=400)
 
     t = Ticket(
-        raised_by_id=request.user.id,
-        student_id=int(student_id),
+        raised_by_id=str(request.user.id),
+        student_id=str(student_id),
         task_id=task_id,
         classroom_id=classroom_id,
         reason=reason,
@@ -494,7 +494,7 @@ def scout_match(request):
     room_code = _generate_room_code()
     room = BattleRoom(room_code=room_code, task_id=str(task.id))
     if request.user.is_authenticated:
-        room.player1_id = request.user.id
+        room.player1_id = str(request.user.id)
     room.save()
 
     return Response({
@@ -559,7 +559,7 @@ def record_submission(request, task_id):
         return Response({'error': 'Task not found'}, status=404)
 
     username    = request.user.username
-    user_id     = request.user.id
+    user_id     = str(request.user.id)
     code        = request.data.get('code', '')
     language    = request.data.get('language', task.tech_stack or 'Python')
     run_results = request.data.get('run_results', [])
@@ -667,7 +667,7 @@ def unsubmit(request, task_id):
     except Exception:
         return Response({'error': 'Task not found'}, status=404)
 
-    uid     = request.user.id
+    uid     = str(request.user.id)
     changed = False
     for s in (task.submissions or []):
         if s.user_id == uid and getattr(s, 'is_active', True):
@@ -689,9 +689,9 @@ def _log(action_type, actor, target_user=None, task=None, classroom=None, detail
             tu = None
         ActionLog(
             action_type     = action_type,
-            actor_id        = actor.id,
+            actor_id        = str(actor.id),
             actor_username  = actor.username,
-            target_user_id  = tu.id if tu else None,
+            target_user_id  = str(tu.id) if tu else None,
             target_username = tu.username if tu else '',
             task_id         = str(task.id) if task else '',
             task_title      = task.title if task else '',
@@ -705,7 +705,7 @@ def _log(action_type, actor, target_user=None, task=None, classroom=None, detail
 
 def _is_admin(request):
     return request.user.is_superuser or (
-        CoderProfile.objects.filter(user_id=request.user.id, role='ADMIN').exists()
+        CoderProfile.objects.filter(user_id=str(request.user.id), role='ADMIN').exists()
     )
 
 
@@ -725,7 +725,7 @@ def raise_ticket(request):
         return Response({'error': 'student_id, classroom_id, and reason are required'}, status=400)
 
     try:
-        student = User.objects.get(id=int(student_id))
+        student = User.objects.get(id=student_id)
         student_username = student.username
     except Exception:
         return Response({'error': 'Student not found'}, status=404)
@@ -746,9 +746,9 @@ def raise_ticket(request):
 
     ticket = Ticket(
         ticket_type        = ticket_type,
-        raised_by_id       = request.user.id,
+        raised_by_id       = str(request.user.id),
         raised_by_username = request.user.username,
-        student_id         = int(student_id),
+        student_id         = str(student_id),
         student_username   = student_username,
         task_id            = task_id,
         task_title         = task_title,
@@ -757,7 +757,7 @@ def raise_ticket(request):
         reason             = reason,
     )
     ticket.save()
-    _log('ticket_raised', request.user, target_user=int(student_id), details=f'Type: {ticket_type}. Reason: {reason}')
+    _log('ticket_raised', request.user, target_user=str(student_id), details=f'Type: {ticket_type}. Reason: {reason}')
     return Response({'status': 'raised', 'ticket_id': str(ticket.id)}, status=201)
 
 
@@ -771,12 +771,12 @@ def admin_users(request):
     role_filter = request.query_params.get('role')
     result = []
     for u in User.objects.all().order_by('id'):
-        prof = CoderProfile.objects.filter(user_id=u.id).first()
+        prof = CoderProfile.objects.filter(user_id=str(u.id)).first()
         role = prof.role if prof else ('ADMIN' if u.is_superuser else 'STUDENT')
         if role_filter and role != role_filter:
             continue
         row = {
-            'id': u.id, 'username': u.username, 'email': u.email,
+            'id': str(u.id), 'username': u.username, 'email': u.email,
             'role': role, 'is_active': u.is_active,
             'date_joined': u.date_joined.isoformat(),
             'xp': (prof.xp if prof and role == 'STUDENT' else None),
@@ -798,7 +798,7 @@ def admin_user_action(request, user_id):
     if request.method == 'DELETE':
         _log('user_deleted', request.user, target_user=user_id, details=f'User {u.username} deleted.')
         u.delete()
-        CoderProfile.objects.filter(user_id=user_id).delete()
+        CoderProfile.objects.filter(user_id=str(user_id)).delete()
         return Response({'status': 'deleted'})
     if request.method == 'PATCH':
         action = request.data.get('action')

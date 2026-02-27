@@ -41,9 +41,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken', # Added for Token Auth
     'arena_api',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
+    'backend.apps.MongoAdminConfig',
+    'backend.apps.MongoAuthConfig',
+    'backend.apps.MongoContentTypesConfig',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
@@ -81,8 +81,9 @@ CHANNEL_LAYERS = {
 }
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -146,6 +147,7 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://byte-bit-frontend.vercel.app",
     "https://bytebit-backend.onrender.com",
+    "https://bytebit-backend-9gvw.onrender.com",
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -159,12 +161,23 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django_mongodb_backend',
+        'HOST': os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
+        'NAME': 'bytebit_db',
     }
 }
 
+DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
+
+MIGRATION_MODULES = {
+    "admin": "mongo_migrations.admin",
+    "auth": "mongo_migrations.auth",
+    "contenttypes": "mongo_migrations.contenttypes",
+}
+
+# MongoEngine connection for app-level Document models
 import mongoengine
+<<<<<<< HEAD
 mongo_uri = os.getenv('MONGO_URI') or os.getenv('MONGODB_URI')
 if mongo_uri:
     mongoengine.connect(
@@ -174,6 +187,13 @@ if mongo_uri:
     )
 else:
     print("WARNING: No MongoDB URI found. Set MONGO_URI or MONGODB_URI.")
+=======
+mongoengine.connect(
+    db='bytebit_db',
+    host=os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
+    alias='default'
+)
+>>>>>>> c1b5e4a4456350c598417c837f9450de8b60f5ff
 
 
 # Password validation
@@ -211,3 +231,4 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'

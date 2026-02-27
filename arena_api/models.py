@@ -13,7 +13,7 @@ def gen_code(length=6):
 # ── Profiles ───────────────────────────────────────────────────────────────────
 
 class CoderProfile(Document):
-    user_id = fields.IntField(required=True, unique=True)
+    user_id = fields.StringField(required=True, unique=True)
 
     level      = fields.IntField(default=1)
     xp         = fields.IntField(default=0)
@@ -52,7 +52,7 @@ class TestCase(EmbeddedDocument):
 
 
 class Submission(EmbeddedDocument):
-    user_id      = fields.IntField(required=True)
+    user_id      = fields.StringField(required=True)
     username     = fields.StringField(required=True)
     code         = fields.StringField(required=True)
     passed       = fields.BooleanField(default=False)
@@ -116,8 +116,8 @@ class Classroom(Document):
     name        = fields.StringField(max_length=200, required=True)
     code        = fields.StringField(required=True)
     type        = fields.StringField(choices=["Public", "Private"], default="Public")
-    teacher_id  = fields.IntField(required=True)
-    student_ids = fields.ListField(fields.IntField(), default=[])
+    teacher_id  = fields.StringField(required=True)
+    student_ids = fields.ListField(fields.StringField(), default=[])
     task_ids    = fields.ListField(fields.StringField(), default=[])
     is_locked   = fields.BooleanField(default=False)
     announcements = fields.ListField(fields.EmbeddedDocumentField(Announcement), default=[])
@@ -137,9 +137,9 @@ class Ticket(Document):
         choices=["Revoke Credit", "Remove Student"],
         default="Revoke Credit"
     )
-    raised_by_id      = fields.IntField(required=True)
+    raised_by_id      = fields.StringField(required=True)
     raised_by_username = fields.StringField(default='')
-    student_id        = fields.IntField(required=True)
+    student_id        = fields.StringField(required=True)
     student_username  = fields.StringField(default='')
     task_id           = fields.StringField(default='')
     task_title        = fields.StringField(default='')
@@ -159,9 +159,9 @@ class Ticket(Document):
 class ActionLog(Document):
     """Immutable log of every significant platform action."""
     action_type   = fields.StringField(required=True)  # e.g. 'submission', 'credit_revoked', ...
-    actor_id      = fields.IntField(required=True)
+    actor_id      = fields.StringField(required=True)
     actor_username = fields.StringField(default='')
-    target_user_id = fields.IntField(required=False)
+    target_user_id = fields.StringField(required=False)
     target_username = fields.StringField(default='')
     task_id       = fields.StringField(default='')
     task_title    = fields.StringField(default='')
@@ -178,9 +178,9 @@ class ActionLog(Document):
 class BattleRoom(Document):
     room_code  = fields.StringField(max_length=6, unique=True, required=True)
     task_id    = fields.StringField(required=True)
-    player1_id = fields.IntField(required=False)
-    player2_id = fields.IntField(required=False)
-    winner_id  = fields.IntField(required=False)
+    player1_id = fields.StringField(required=False)
+    player2_id = fields.StringField(required=False)
+    winner_id  = fields.StringField(required=False)
     is_active  = fields.BooleanField(default=True)
     created_at = fields.DateTimeField(default=datetime.utcnow)
 

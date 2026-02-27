@@ -1,0 +1,356 @@
+{% load string_extras %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ByteBit System Status</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --card-bg: rgba(20, 20, 20, 0.7);
+            --primary-neon: #00f2ff;
+            --secondary-neon: #7000ff;
+            --success-neon: #39ff14;
+            --error-neon: #ff3131;
+            --text-color: #e0e0e0;
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #050505 100%);
+        }
+
+        .background-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            background:
+                radial-gradient(circle at 10% 10%, rgba(0, 242, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 90%, rgba(112, 0, 255, 0.05) 0%, transparent 40%);
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            padding: 40px 0;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--primary-neon), var(--secondary-neon));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: 1px solid currentColor;
+            margin-top: 10px;
+        }
+
+        .status-healthy {
+            color: var(--success-neon);
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
+        }
+
+        .status-warning {
+            color: #ffcc00;
+            text-shadow: 0 0 10px rgba(255, 204, 0, 0.4);
+        }
+
+        .status-unhealthy {
+            color: var(--error-neon);
+            text-shadow: 0 0 10px rgba(255, 49, 49, 0.4);
+        }
+
+        .dashboard {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            padding: 20px 30px;
+            border-radius: 12px;
+            text-align: center;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-width: 200px;
+        }
+
+        .service-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .service-status {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .detail {
+            display: none;
+            /* Hide details by default for "important data only" */
+        }
+
+        .endpoints-section {
+            opacity: 0.5;
+            transition: opacity 0.3s ease;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .endpoints-section:hover {
+            opacity: 1;
+        }
+
+        .endpoints-header {
+            padding: 10px 20px;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            border: none;
+        }
+
+        .endpoints-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            color: #444;
+            text-transform: uppercase;
+        }
+
+        .endpoints-content {
+            display: none;
+            padding: 20px;
+        }
+
+        .endpoints-content.active {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--glass-border);
+            color: #888;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        .method {
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+
+        .method-GET {
+            background: rgba(0, 242, 255, 0.1);
+            color: var(--primary-neon);
+        }
+
+        .method-POST {
+            background: rgba(112, 0, 255, 0.1);
+            color: var(--secondary-neon);
+        }
+
+        .method-DELETE {
+            background: rgba(255, 49, 49, 0.1);
+            color: var(--error-neon);
+        }
+
+        .path {
+            font-family: 'Courier New', monospace;
+            color: #aaa;
+        }
+
+        footer {
+            margin-top: 50px;
+            color: #555;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.6;
+            }
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: var(--success-neon);
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 0 10px var(--success-neon);
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-glow"></div>
+
+    <div class="container">
+        <header>
+            <h1>ByteBit</h1>
+            <div
+                class="status-badge {% if status == 'healthy' %}status-healthy{% elif 'redis unavailable' in status %}status-warning{% else %}status-unhealthy{% endif %}">
+                <span class="live-indicator"></span>
+                {{ status }}
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <div class="card">
+                <div class="service-name">Django Core</div>
+                <div class="service-status status-healthy">OPERATIONAL</div>
+                <div class="detail">Version {{ checks.django.version }}</div>
+            </div>
+
+            <div class="card">
+                <div class="service-name">MongoDB</div>
+                <div
+                    class="service-status {% if checks.mongodb.status == 'ok' %}status-healthy{% else %}status-unhealthy{% endif %}">
+                    {% if checks.mongodb.status == 'ok' %}ONLINE{% else %}OFFLINE{% endif %}
+                </div>
+                <div class="detail">Database: {{ checks.mongodb.database|default:"N/A" }}</div>
+            </div>
+
+            <div class="card">
+                <div class="service-name">Redis</div>
+                <div
+                    class="service-status {% if checks.redis.status == 'ok' %}status-healthy{% else %}status-unhealthy{% endif %}">
+                    {% if checks.redis.status == 'ok' %}ONLINE{% else %}OFFLINE{% endif %}
+                </div>
+                <div class="detail">{{ checks.redis.detail|default:"Cluster Node Ready" }}</div>
+            </div>
+        </div>
+
+        <div class="endpoints-section">
+            <div class="endpoints-header" onclick="toggleEndpoints()">
+                <div class="endpoints-title">API DIRECTORY ({{ total_endpoints }})</div>
+                <div id="chevron">▼</div>
+            </div>
+            <div class="endpoints-content" id="endpointsContent">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>Description</th>
+                            <th>Auth</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for endpoint in endpoints %}
+                        <tr>
+                            <td><span class="method method-{{ endpoint.method|split:'|'|first|trim }}">{{
+                                    endpoint.method }}</span></td>
+                            <td class="path">{{ endpoint.path }}</td>
+                            <td>{{ endpoint.desc }}</td>
+                            <td>{{ endpoint.auth }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <footer>
+            &copy; 2026 ByteBit Cloud Infrastructure. Running on Render.
+        </footer>
+    </div>
+
+    <script>
+        function toggleEndpoints() {
+            const content = document.getElementById('endpointsContent');
+            const chevron = document.getElementById('chevron');
+            if (content.style.display === 'block') {
+                content.style.display = 'none';
+                chevron.innerText = '▼';
+            } else {
+                content.style.display = 'block';
+                chevron.innerText = '▲';
+            }
+        }
+    </script>
+</body>
+
+</html>

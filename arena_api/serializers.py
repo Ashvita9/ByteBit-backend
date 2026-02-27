@@ -62,5 +62,5 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             email=validated_data.get('email', ''),
             password=validated_data['password']
         )
-        CoderProfile(user_id=user.id, role='STUDENT').save()
+        CoderProfile(user_id=str(user.id), role='STUDENT').save()
         return user
