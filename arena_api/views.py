@@ -14,19 +14,24 @@ from django.contrib.auth.models import User
 
 from .models import (
     CodingTask, CoderProfile, BattleRoom,
-    Submission, Classroom, Announcement, Ticket, ActionLog
+    Submission, Classroom, Announcement, Ticket, ActionLog,
+    GlobalAnnouncement
 )
 from .serializers import (
     CodingTaskSerializer,
     CoderProfileSerializer,
     UserRegistrationSerializer,
 )
+from rest_framework.exceptions import AuthenticationFailed
 
 
 # â”€â”€ Permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class IsTeacherOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
+        if request.user and not request.user.is_active:
+            return False
+            
         if request.method in permissions.SAFE_METHODS:
             return True
         return bool(request.user and request.user.is_staff)
@@ -34,6 +39,8 @@ class IsTeacherOrReadOnly(permissions.BasePermission):
 
 class IsTeacher(permissions.BasePermission):
     def has_permission(self, request, view):
+        if request.user and not request.user.is_active:
+            return False
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
 
@@ -107,6 +114,10 @@ def create_teacher(request):
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
+        
+        if not self.user.is_active:
+            raise AuthenticationFailed('This account has been locked by an administrator.')
+            
         data['username'] = self.user.username
         data['user_id']  = str(self.user.id)
 
@@ -1004,3 +1015,38 @@ def admin_logs(request):
             'details': log.details, 'timestamp': log.created_at.isoformat(),
         })
     return Response(result)
+
+# ── ADMIN: Global Announcements ──────────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.IsAuthenticated])
+def admin_announcements(request):
+    if not _is_admin(request):
+        return Response({'error': 'Forbidden'}, status=403)
+        
+    if request.method == 'GET':
+        posts = GlobalAnnouncement.objects.all().order_by('-isPinned', '-created_at')
+        return Response([{
+            'id': str(p.id),
+            'title': p.title,
+            'message': p.message,
+            'targetRole': p.targetRole,
+            'isPinned': p.isPinned,
+            'createdAt': p.created_at.isoformat()
+        } for p in posts])
+        
+    if request.method == 'POST':
+        p = GlobalAnnouncement(
+            title=request.data.get('title', 'Announcement'),
+            message=request.data.get('message', ''),
+            targetRole=request.data.get('targetRole', 'ALL'),
+            isPinned=request.data.get('isPinned', False)
+        )
+        p.save()
+        _log('global_broadcast', request.user, details=f'Broadcast: {p.title}')
+        return Response({
+            'status': 'created',
+            'id': str(p.id),
+            'title': p.title,
+            'isPinned': p.isPinned
+        }, status=201)
