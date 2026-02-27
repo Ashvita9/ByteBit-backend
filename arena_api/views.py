@@ -106,33 +106,26 @@ def create_teacher(request):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
-        try:
-            data = super().validate(attrs)
-            data['username'] = self.user.username
-            data['user_id']  = self.user.id
+        data = super().validate(attrs)
+        data['username'] = self.user.username
+        data['user_id']  = self.user.id
 
-            if self.user.is_superuser:
-                data['role'] = 'ADMIN'
-                return data
-
-            try:
-                profile      = CoderProfile.objects.get(user_id=self.user.id)
-                data['role'] = profile.role
-                data['xp']   = profile.xp
-                data['level']  = profile.level
-                data['wins']   = profile.wins
-                data['losses'] = profile.losses
-                data['rank']   = profile.rank
-                data['badges'] = profile.badges
-            except Exception:
-                data['role'] = 'STUDENT'
+        if self.user.is_superuser:
+            data['role'] = 'ADMIN'
             return data
-        except Exception as e:
-            import traceback
-            print("--- LOGIN ERROR DEBUG ---")
-            traceback.print_exc()
-            print("-------------------------")
-            raise e
+
+        try:
+            profile      = CoderProfile.objects.get(user_id=self.user.id)
+            data['role'] = profile.role
+            data['xp']   = profile.xp
+            data['level']  = profile.level
+            data['wins']   = profile.wins
+            data['losses'] = profile.losses
+            data['rank']   = profile.rank
+            data['badges'] = profile.badges
+        except Exception:
+            data['role'] = 'STUDENT'
+        return data
 
 
 class CustomLoginView(TokenObtainPairView):
