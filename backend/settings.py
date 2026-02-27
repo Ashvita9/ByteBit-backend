@@ -133,6 +133,7 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://byte-bit-frontend.vercel.app",
     "https://bytebit-backend.onrender.com",
+    "https://bytebit-backend-9gvw.onrender.com",
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
