@@ -177,23 +177,20 @@ MIGRATION_MODULES = {
 
 # MongoEngine connection for app-level Document models
 import mongoengine
-<<<<<<< HEAD
 mongo_uri = os.getenv('MONGO_URI') or os.getenv('MONGODB_URI')
 if mongo_uri:
     mongoengine.connect(
-        db='codingarena_db',
+        db='bytebit_db',
         host=mongo_uri,
         alias='default'
     )
 else:
     print("WARNING: No MongoDB URI found. Set MONGO_URI or MONGODB_URI.")
-=======
-mongoengine.connect(
-    db='bytebit_db',
-    host=os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
-    alias='default'
-)
->>>>>>> c1b5e4a4456350c598417c837f9450de8b60f5ff
+    mongoengine.connect(
+        db='bytebit_db',
+        host='mongodb://localhost:27017',
+        alias='default'
+    )
 
 
 # Password validation
