@@ -1,0 +1,9 @@
+Task: Hello World in Python
+ TC: expected='Hello World', hidden=True
+Task: HTML Challenge #1: Hello World HTML
+ TC: expected='<html>', hidden=False
+Task: JavaScript Challenge #1: Hello World in JS
+ TC: expected='js_result_test_1', hidden=False
+ TC: expected='js_hidden_1', hidden=True
+Task: Hello World
+ TC: expected='hello', hidden=False

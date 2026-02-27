@@ -110,13 +110,22 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['username'] = self.user.username
         data['user_id']  = str(self.user.id)
 
+        # Base role on user flags first
         if self.user.is_superuser:
             data['role'] = 'ADMIN'
             return data
+        
+        # If they are staff, they are a Teacher
+        is_teacher = getattr(self.user, 'is_staff', False)
 
         try:
             profile      = CoderProfile.objects.get(user_id=str(self.user.id))
-            data['role'] = profile.role
+            # Even if profile says Student, if they have staff flag, they are Teacher
+            if is_teacher:
+                data['role'] = 'TEACHER'
+            else:
+                data['role'] = profile.role
+
             data['xp']   = profile.xp
             data['level']  = profile.level
             data['wins']   = profile.wins
@@ -124,7 +133,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             data['rank']   = profile.rank
             data['badges'] = profile.badges
         except Exception:
-            data['role'] = 'STUDENT'
+            # Profile doesn't exist, fallback to flags
+            data['role'] = 'TEACHER' if is_teacher else 'STUDENT'
+            
         return data
 
 
@@ -580,8 +591,11 @@ def record_submission(request, task_id):
 
     now = datetime.utcnow()
 
+    if task.submissions is None:
+        task.submissions = []
+
     # Deactivate all prior active submissions from this user on this task
-    for s in (task.submissions or []):
+    for s in task.submissions:
         if s.user_id == user_id and getattr(s, 'is_active', True):
             s.is_active = False
             s.status    = 'Unsubmitted'
@@ -1000,3 +1014,10 @@ def admin_logs(request):
             'details': log.details, 'timestamp': log.created_at.isoformat(),
         })
     return Response(result)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def admin_announcements(request):
+    # Dummy implementation since Announcement model lives inside Classrooms only.
+    # Frontend TeacherDashboard.jsx expects an array from this endpoint.
+    return Response([])
