@@ -14,7 +14,7 @@ django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework-simplejwt
 django-rest-framework-mongoengine
-djongo==1.2.31
+django-mongodb-backend
 dnspython==2.8.0
 gunicorn
 hyperlink==21.0.0

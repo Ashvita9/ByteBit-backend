@@ -147,13 +147,15 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'djongo',
+        'ENGINE': 'django_mongodb_backend',
         'NAME': 'codingarena_db',
         'CLIENT': {
             'host': os.getenv('MONGO_URI'),
         }
     }
 }
+
+DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 import mongoengine
 mongoengine.connect(
