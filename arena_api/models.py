@@ -22,7 +22,7 @@ class CoderProfile(Document):
     badges     = fields.ListField(fields.StringField(), default=[])
     rank       = fields.StringField(
         default="Novice",
-        choices=["Novice", "Apprentice", "Warrior", "Elite", "Grandmaster"]
+        choices=["Novice", "Apprentice", "Warrior", "Elite", "Grandmaster", "Not Applicable"]
     )
     role       = fields.StringField(default="STUDENT", choices=["ADMIN", "TEACHER", "STUDENT"])
 
@@ -129,7 +129,21 @@ class Classroom(Document):
         return self.name
 
 
+# ── Global Announcements / Broadcasts ──────────────────────────────────────────
+
+class GlobalAnnouncement(Document):
+    """Platform-wide broadcasts by admins targeting specific roles or everyone."""
+    title       = fields.StringField(required=True, max_length=200)
+    message     = fields.StringField(required=True)
+    targetRole  = fields.StringField(choices=["ALL", "STUDENT", "TEACHER"], default="ALL")
+    isPinned    = fields.BooleanField(default=False)
+    created_at  = fields.DateTimeField(default=datetime.utcnow)
+
+    meta = {'collection': 'global_announcements', 'ordering': ['-created_at']}
+
+
 # ── Tickets ────────────────────────────────────────────────────────────────────
+
 
 class Ticket(Document):
     """Teacher raises a ticket. Admin resolves it."""
