@@ -801,10 +801,39 @@ def admin_user_action(request, user_id):
         CoderProfile.objects.filter(user_id=str(user_id)).delete()
         return Response({'status': 'deleted'})
     if request.method == 'PATCH':
-        u.is_active = not u.is_active
-        u.save()
-        _log('user_locked' if not u.is_active else 'user_unlocked', request.user, target_user=user_id, details=f'{u.username} {"locked" if not u.is_active else "unlocked"}.')
-        return Response({'status': 'ok', 'is_active': u.is_active})
+        if 'role' in request.data:
+            role = request.data['role']
+            # Only allow STUDENT, TEACHER, ADMIN roles as per model definition
+            if role in ["STUDENT", "TEACHER", "ADMIN"]:
+                # If promoting to ADMIN, we need to make them a superuser in Django User model
+                if role == "ADMIN":
+                    u.is_staff = True
+                    u.is_superuser = True
+                else:
+                    u.is_superuser = False
+                    if role == "TEACHER":
+                        u.is_staff = True
+
+                u.save()
+
+                # Update the CoderProfile
+                prof = CoderProfile.objects.filter(user_id=str(user_id)).first()
+                if prof:
+                    prof.role = role
+                    prof.save()
+                else:
+                    # Create profile if it doesn't exist for some reason
+                    CoderProfile(user_id=str(user_id), role=role).save()
+                
+                _log('user_role_updated', request.user, target_user=user_id, details=f'{u.username} role updated to {role}.')
+                return Response({'status': 'ok', 'role': role})
+            else:
+                 return Response({'error': 'Invalid role provided'}, status=400)
+        else:
+            u.is_active = not u.is_active
+            u.save()
+            _log('user_locked' if not u.is_active else 'user_unlocked', request.user, target_user=user_id, details=f'{u.username} {"locked" if not u.is_active else "unlocked"}.')
+            return Response({'status': 'ok', 'is_active': u.is_active})
 
 
 # ── ADMIN: Classrooms ────────────────────────────────────────────────────────
