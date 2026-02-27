@@ -44,11 +44,12 @@ urlpatterns = [
 
     # Admin
     path('admin/users/',                          views.admin_users,            name='admin-users'),
-    path('admin/users/<int:user_id>/',            views.admin_user_action,      name='admin-user-action'),
+    path('admin/users/<str:user_id>/',            views.admin_user_action,      name='admin-user-action'),
     path('admin/classrooms/',                     views.admin_classrooms,       name='admin-classrooms'),
     path('admin/classrooms/<str:classroom_id>/',  views.admin_classroom_action, name='admin-classroom-action'),
     path('admin/tickets/',                        views.admin_tickets,          name='admin-tickets'),
     path('admin/tickets/<str:ticket_id>/',        views.admin_ticket_action,    name='admin-ticket-action'),
+    path('admin/announcements/',                  views.admin_announcements,    name='admin-announcements'),
     path('admin/logs/',                           views.admin_logs,             name='admin-logs'),
 
     # Teacher raises ticket
