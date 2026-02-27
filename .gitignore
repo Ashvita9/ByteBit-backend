@@ -10,3 +10,5 @@ db.sqlite3
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+battle-royale/node_modules/
+battle-royale/.env
