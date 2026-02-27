@@ -8,7 +8,6 @@ channels==4.3.2
 constantly==23.10.4
 cryptography==46.0.5
 daphne==4.2.1
-dataclasses==0.6
 Django==6.0.2
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
@@ -22,7 +21,6 @@ idna==3.11
 Incremental==24.11.0
 msgpack==1.1.2
 packaging==26.0
-py-ubjson==0.16.1
 pyasn1==0.6.2
 pyasn1_modules==0.4.2
 pycparser==3.0
@@ -31,13 +29,12 @@ pyOpenSSL==25.3.0
 python-dotenv==1.2.1
 redis
 service-identity==24.2.0
-sqlparse==0.5.5
 Twisted==25.5.0
 txaio==25.12.2
 typing_extensions==4.15.0
 tzdata==2025.3
-ujson==5.11.0
 whitenoise
 zope.interface==8.2
 mongoengine
 pytz
+channels-redis

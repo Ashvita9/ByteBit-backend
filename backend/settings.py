@@ -41,9 +41,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken', # Added for Token Auth
     'arena_api',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
+    'backend.apps.MongoAdminConfig',
+    'backend.apps.MongoAuthConfig',
+    'backend.apps.MongoContentTypesConfig',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
@@ -148,19 +148,24 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django_mongodb_backend',
-        'NAME': 'codingarena_db',
-        'CLIENT': {
-            'host': os.getenv('MONGO_URI'),
-        }
+        'HOST': os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
+        'NAME': 'bytebit_db',
     }
 }
 
 DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
+MIGRATION_MODULES = {
+    "admin": "mongo_migrations.admin",
+    "auth": "mongo_migrations.auth",
+    "contenttypes": "mongo_migrations.contenttypes",
+}
+
+# MongoEngine connection for app-level Document models
 import mongoengine
 mongoengine.connect(
-    db='codingarena_db',
-    host=os.getenv('MONGO_URI'),
+    db='bytebit_db',
+    host=os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
     alias='default'
 )
 
