@@ -50,6 +50,7 @@ urlpatterns = [
     path('admin/announcements/',                  views.admin_announcements,    name='admin-announcements'),
     path('admin/tickets/',                        views.admin_tickets,          name='admin-tickets'),
     path('admin/tickets/<str:ticket_id>/',        views.admin_ticket_action,    name='admin-ticket-action'),
+    path('admin/announcements/',                  views.admin_announcements,    name='admin-announcements'),
     path('admin/logs/',                           views.admin_logs,             name='admin-logs'),
 
     # Teacher raises ticket

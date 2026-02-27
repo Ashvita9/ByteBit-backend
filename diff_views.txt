@@ -1,0 +1,200 @@
+diff --git a/arena_api/views.py b/arena_api/views.py
+index 7e0fd2c..e316271 100644
+--- a/arena_api/views.py
++++ b/arena_api/views.py
+@@ -14,19 +14,24 @@ from django.contrib.auth.models import User
+ 
+ from .models import (
+     CodingTask, CoderProfile, BattleRoom,
+-    Submission, Classroom, Announcement, Ticket, ActionLog
++    Submission, Classroom, Announcement, Ticket, ActionLog,
++    GlobalAnnouncement
+ )
+ from .serializers import (
+     CodingTaskSerializer,
+     CoderProfileSerializer,
+     UserRegistrationSerializer,
+ )
++from rest_framework.exceptions import AuthenticationFailed
+ 
+ 
+ # â”€â”€ Permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ 
+ class IsTeacherOrReadOnly(permissions.BasePermission):
+     def has_permission(self, request, view):
++        if request.user and not request.user.is_active:
++            return False
++            
+         if request.method in permissions.SAFE_METHODS:
+             return True
+         return bool(request.user and request.user.is_staff)
+@@ -34,6 +39,8 @@ class IsTeacherOrReadOnly(permissions.BasePermission):
+ 
+ class IsTeacher(permissions.BasePermission):
+     def has_permission(self, request, view):
++        if request.user and not request.user.is_active:
++            return False
+         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+ 
+ 
+@@ -107,25 +114,20 @@ def create_teacher(request):
+ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+     def validate(self, attrs):
+         data = super().validate(attrs)
++        
++        if not self.user.is_active:
++            raise AuthenticationFailed('This account has been locked by an administrator.')
++            
+         data['username'] = self.user.username
+         data['user_id']  = str(self.user.id)
+ 
+-        # Base role on user flags first
+         if self.user.is_superuser:
+             data['role'] = 'ADMIN'
+             return data
+-        
+-        # If they are staff, they are a Teacher
+-        is_teacher = getattr(self.user, 'is_staff', False)
+ 
+         try:
+             profile      = CoderProfile.objects.get(user_id=str(self.user.id))
+-            # Even if profile says Student, if they have staff flag, they are Teacher
+-            if is_teacher:
+-                data['role'] = 'TEACHER'
+-            else:
+-                data['role'] = profile.role
+-
++            data['role'] = profile.role
+             data['xp']   = profile.xp
+             data['level']  = profile.level
+             data['wins']   = profile.wins
+@@ -133,9 +135,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+             data['rank']   = profile.rank
+             data['badges'] = profile.badges
+         except Exception:
+-            # Profile doesn't exist, fallback to flags
+-            data['role'] = 'TEACHER' if is_teacher else 'STUDENT'
+-            
++            data['role'] = 'STUDENT'
+         return data
+ 
+ 
+@@ -591,11 +591,8 @@ def record_submission(request, task_id):
+ 
+     now = datetime.utcnow()
+ 
+-    if task.submissions is None:
+-        task.submissions = []
+-
+     # Deactivate all prior active submissions from this user on this task
+-    for s in task.submissions:
++    for s in (task.submissions or []):
+         if s.user_id == user_id and getattr(s, 'is_active', True):
+             s.is_active = False
+             s.status    = 'Unsubmitted'
+@@ -815,34 +812,38 @@ def admin_user_action(request, user_id):
+         CoderProfile.objects.filter(user_id=str(user_id)).delete()
+         return Response({'status': 'deleted'})
+     if request.method == 'PATCH':
+-        if 'role' in request.data:
+-            role = request.data['role']
+-            # Only allow STUDENT, TEACHER, ADMIN roles as per model definition
+-            if role in ["STUDENT", "TEACHER", "ADMIN"]:
+-                # If promoting to ADMIN, we need to make them a superuser in Django User model
+-                if role == "ADMIN":
+-                    u.is_staff = True
+-                    u.is_superuser = True
+-                else:
+-                    u.is_superuser = False
+-                    if role == "TEACHER":
+-                        u.is_staff = True
++        action = request.data.get('action')
++        new_role = request.data.get('role')
+ 
++        if action == 'reset_password':
++            new_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
++            u.set_password(new_password)
++            u.save()
++            _log('password_reset', request.user, target_user=user_id, details=f'Password reset for {u.username}.')
++            return Response({'status': 'ok', 'password': new_password})
++            
++        elif new_role in ['ADMIN', 'TEACHER', 'STUDENT']:
++            # For superusers (ADMIN role)
++            if new_role == 'ADMIN':
++                u.is_superuser = True
+                 u.save()
+-
+-                # Update the CoderProfile
+-                prof = CoderProfile.objects.filter(user_id=str(user_id)).first()
+-                if prof:
+-                    prof.role = role
+-                    prof.save()
+-                else:
+-                    # Create profile if it doesn't exist for some reason
+-                    CoderProfile(user_id=str(user_id), role=role).save()
+-                
+-                _log('user_role_updated', request.user, target_user=user_id, details=f'{u.username} role updated to {role}.')
+-                return Response({'status': 'ok', 'role': role})
+             else:
+-                 return Response({'error': 'Invalid role provided'}, status=400)
++                u.is_superuser = False
++                u.save()
++            
++            # Update CoderProfile role
++            prof = CoderProfile.objects.filter(user_id=str(user_id)).first()
++            if not prof:
++                prof = CoderProfile(user_id=str(user_id))
++            
++            prof.role = new_role
++            if new_role != 'STUDENT' and prof.rank != 'Not Applicable':
++                prof.rank = 'Not Applicable'
++            prof.save()
++            
++            _log('role_changed', request.user, target_user=user_id, details=f'Role changed to {new_role} for {u.username}.')
++            return Response({'status': 'ok', 'role': new_role})
++            
+         else:
+             u.is_active = not u.is_active
+             u.save()
+@@ -1015,9 +1016,37 @@ def admin_logs(request):
+         })
+     return Response(result)
+ 
+-@api_view(['GET'])
++# ── ADMIN: Global Announcements ──────────────────────────────────────────────
++
++@api_view(['GET', 'POST'])
+ @permission_classes([permissions.IsAuthenticated])
+ def admin_announcements(request):
+-    # Dummy implementation since Announcement model lives inside Classrooms only.
+-    # Frontend TeacherDashboard.jsx expects an array from this endpoint.
+-    return Response([])
++    if not _is_admin(request):
++        return Response({'error': 'Forbidden'}, status=403)
++        
++    if request.method == 'GET':
++        posts = GlobalAnnouncement.objects.all().order_by('-isPinned', '-created_at')
++        return Response([{
++            'id': str(p.id),
++            'title': p.title,
++            'message': p.message,
++            'targetRole': p.targetRole,
++            'isPinned': p.isPinned,
++            'createdAt': p.created_at.isoformat()
++        } for p in posts])
++        
++    if request.method == 'POST':
++        p = GlobalAnnouncement(
++            title=request.data.get('title', 'Announcement'),
++            message=request.data.get('message', ''),
++            targetRole=request.data.get('targetRole', 'ALL'),
++            isPinned=request.data.get('isPinned', False)
++        )
++        p.save()
++        _log('global_broadcast', request.user, details=f'Broadcast: {p.title}')
++        return Response({
++            'status': 'created',
++            'id': str(p.id),
++            'title': p.title,
++            'isPinned': p.isPinned
++        }, status=201)
