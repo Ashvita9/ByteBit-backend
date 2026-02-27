@@ -832,9 +832,9 @@ def admin_user_action(request, user_id):
                 u.save()
             
             # Update CoderProfile role
-            prof = CoderProfile.objects.filter(user_id=u.id).first()
+            prof = CoderProfile.objects.filter(user_id=str(user_id)).first()
             if not prof:
-                prof = CoderProfile(user_id=u.id)
+                prof = CoderProfile(user_id=str(user_id))
             
             prof.role = new_role
             if new_role != 'STUDENT' and prof.rank != 'Not Applicable':
