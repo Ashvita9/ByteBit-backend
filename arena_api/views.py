@@ -47,7 +47,6 @@ class IsTeacher(permissions.BasePermission):
 
 class CodingTaskViewSet(viewsets.ModelViewSet):
     lookup_field    = 'id'
-    queryset        = CodingTask.objects.all()
     serializer_class = CodingTaskSerializer
     permission_classes = [IsTeacherOrReadOnly]
 
