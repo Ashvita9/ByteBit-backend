@@ -11,11 +11,11 @@ daphne==4.2.1
 Django==6.0.2
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
-djangorestframework-simplejwt
-django-rest-framework-mongoengine
-django-mongodb-backend
+djangorestframework-simplejwt==5.4.0
+django-rest-framework-mongoengine==3.4.0
+django-mongodb-backend==5.1.1
 dnspython==2.8.0
-gunicorn
+# gunicorn not used — Daphne is the ASGI server
 hyperlink==21.0.0
 idna==3.11
 Incremental==24.11.0
@@ -27,14 +27,14 @@ pycparser==3.0
 pymongo==4.16.0
 pyOpenSSL==25.3.0
 python-dotenv==1.2.1
-redis
+redis==5.2.1
 service-identity==24.2.0
 Twisted==25.5.0
 txaio==25.12.2
 typing_extensions==4.15.0
 tzdata==2025.3
-whitenoise
+whitenoise==6.9.0
 zope.interface==8.2
-mongoengine
-pytz
-channels-redis
+mongoengine==0.29.1
+pytz==2024.2
+channels-redis==4.2.1

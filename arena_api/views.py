@@ -860,11 +860,25 @@ def admin_user_action(request, user_id):
 
 # ── ADMIN: Classrooms ────────────────────────────────────────────────────────
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_classrooms(request):
     if not _is_admin(request):
         return Response({'error': 'Forbidden'}, status=403)
+
+    if request.method == 'POST':
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response({'error': 'name is required'}, status=400)
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        c = Classroom(name=name, type='Public', teacher_id=str(request.user.id), code=code)
+        c.save()
+        _log('classroom_created', request.user, classroom=c,
+             details=f'Admin created public classroom "{name}".')
+        d = _classroom_data(c)
+        d['teacher_name'] = request.user.username
+        return Response(d, status=201)
+
     result = []
     for c in Classroom.objects.all():
         try:

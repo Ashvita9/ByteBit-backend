@@ -1,0 +1,40 @@
+[Unit]
+Description=ByteBit Backend (Daphne ASGI)
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=bytebit
+Group=bytebit
+WorkingDirectory=/opt/bytebit/app/ByteBit-backend
+
+# Load all env vars from the secrets file
+EnvironmentFile=/opt/bytebit/.env
+
+# Ensure the socket dir exists and is owned by our user
+RuntimeDirectory=bytebit
+RuntimeDirectoryMode=0755
+
+ExecStart=/opt/bytebit/venv/bin/daphne \
+    --unix-socket /run/bytebit/daphne.sock \
+    --access-log - \
+    backend.asgi:application
+
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/bytebit/app/ByteBit-backend/staticfiles /run/bytebit
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bytebit-backend
+
+[Install]
+WantedBy=multi-user.target

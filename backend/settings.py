@@ -120,9 +120,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 
-# Ensure CORS works even if the request origin isn't in the list but ALLOW_ALL is True
-CORS_ALLOW_ALL_ORIGINS = True 
-
 CORS_ALLOW_METHODS = [
     "DELETE",
     "GET",
@@ -144,11 +141,13 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+# Extend trusted origins from env (comma-separated) — always include the GCE host and Vercel
+_extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
 CSRF_TRUSTED_ORIGINS = [
     "https://byte-bit-frontend.vercel.app",
-    "https://bytebit-backend.onrender.com",
     "https://bytebit-backend-9gvw.onrender.com",
-]
+    "http://34.14.179.50",
+] + [o.strip() for o in _extra_csrf.split(',') if o.strip()]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 APPEND_SLASH = True
