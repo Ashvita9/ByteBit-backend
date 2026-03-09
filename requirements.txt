@@ -8,7 +8,7 @@ channels==4.3.2
 constantly==23.10.4
 cryptography==46.0.5
 daphne==4.2.1
-django==6.0.2
+django==4.2.11
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.4.0
