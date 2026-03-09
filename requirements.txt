@@ -1,7 +1,7 @@
 asgiref==3.11.1
 attrs==23.1.0
 autobahn==23.1.2
-automat==22.10.0
+automat==24.8.0
 cbor2==5.8.0
 channels==4.3.2
 constantly==23.10.4
@@ -22,7 +22,6 @@ msgpack==1.1.2
 packaging==26.0
 pyasn1==0.6.2
 pyasn1_modules==0.4.2
-pycparser==3.0
 pymongo==4.16.0
 pyopenssl==24.0.0
 python-dotenv==1.2.1
