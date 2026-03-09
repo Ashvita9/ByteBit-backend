@@ -11,7 +11,6 @@ django==5.2
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.4.0
-django-rest-framework-mongoengine==3.4.0
 django-mongodb-backend==5.2.3
 dnspython==2.8.0
 # gunicorn not used — Daphne is the ASGI server

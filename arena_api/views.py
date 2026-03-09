@@ -3,10 +3,9 @@ import string
 from datetime import datetime
 
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework_mongoengine import viewsets
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -22,7 +21,7 @@ from .serializers import (
     CoderProfileSerializer,
     UserRegistrationSerializer,
 )
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, NotFound
 
 
 # â”€â”€ Permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -51,6 +50,16 @@ class CodingTaskViewSet(viewsets.ModelViewSet):
     queryset        = CodingTask.objects.all()
     serializer_class = CodingTaskSerializer
     permission_classes = [IsTeacherOrReadOnly]
+
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        try:
+            obj = queryset.get(**{self.lookup_field: self.kwargs[lookup_url_kwarg]})
+        except Exception:
+            raise NotFound()
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     def get_queryset(self):
         qs = CodingTask.objects.all()

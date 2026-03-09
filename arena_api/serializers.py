@@ -1,28 +1,51 @@
-from rest_framework_mongoengine import serializers as mongoserializers
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import CodingTask, CoderProfile, TestCase, Submission
+from .models import CodingTask, CoderProfile, TestCase, Submission, TECH_STACKS
 
 
-class TestCaseSerializer(mongoserializers.EmbeddedDocumentSerializer):
-    class Meta:
-        model = TestCase
-        fields = '__all__'
+class TestCaseSerializer(serializers.Serializer):
+    input_data  = serializers.CharField()
+    output_data = serializers.CharField()
+    is_hidden   = serializers.BooleanField(default=False)
 
 
-class SubmissionSerializer(mongoserializers.EmbeddedDocumentSerializer):
-    class Meta:
-        model = Submission
-        fields = '__all__'
+class SubmissionSerializer(serializers.Serializer):
+    user_id        = serializers.CharField()
+    username       = serializers.CharField()
+    code           = serializers.CharField()
+    passed         = serializers.BooleanField(default=False)
+    output         = serializers.CharField(default='', allow_blank=True)
+    language       = serializers.CharField(default='Python')
+    score          = serializers.FloatField(default=0.0)
+    marks_obtained = serializers.FloatField(default=0.0)
+    grade          = serializers.CharField(default='', allow_blank=True)
+    remarks        = serializers.CharField(default='', allow_blank=True)
+    is_active      = serializers.BooleanField(default=True)
+    status         = serializers.ChoiceField(choices=['Submitted', 'Unsubmitted'], default='Submitted')
+    last_edited_at = serializers.DateTimeField(read_only=True)
+    created_at     = serializers.DateTimeField(read_only=True)
 
 
-class CodingTaskSerializer(mongoserializers.DocumentSerializer):
-    test_cases  = TestCaseSerializer(many=True)
-    submissions = SubmissionSerializer(many=True, read_only=True)
+class CodingTaskSerializer(serializers.Serializer):
+    id            = serializers.SerializerMethodField()
+    title         = serializers.CharField(max_length=200)
+    description   = serializers.CharField()
+    difficulty    = serializers.ChoiceField(choices=["Easy", "Medium", "Hard"], default="Easy")
+    tech_stack    = serializers.ChoiceField(choices=TECH_STACKS, default="General")
+    test_cases    = TestCaseSerializer(many=True, default=[])
+    submissions   = SubmissionSerializer(many=True, read_only=True)
+    due_date      = serializers.DateTimeField(required=False, allow_null=True)
+    task_type     = serializers.ChoiceField(choices=["Mandatory", "CP"], default="Mandatory")
+    classroom_id  = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    is_final      = serializers.BooleanField(default=False)
+    hints         = serializers.ListField(child=serializers.CharField(), default=[])
+    grading_mode  = serializers.ChoiceField(choices=["Percentage", "Marks", "Grade"], default="Percentage")
+    max_marks     = serializers.FloatField(default=100.0)
+    pass_criteria = serializers.FloatField(default=50.0)
+    created_at    = serializers.DateTimeField(read_only=True)
 
-    class Meta:
-        model  = CodingTask
-        fields = '__all__'
+    def get_id(self, obj):
+        return str(obj.id)
 
     def create(self, validated_data):
         test_cases_data = validated_data.pop('test_cases', [])
@@ -43,10 +66,19 @@ class CodingTaskSerializer(mongoserializers.DocumentSerializer):
         return instance
 
 
-class CoderProfileSerializer(mongoserializers.DocumentSerializer):
-    class Meta:
-        model  = CoderProfile
-        fields = '__all__'
+class CoderProfileSerializer(serializers.Serializer):
+    id      = serializers.SerializerMethodField()
+    user_id = serializers.CharField()
+    level   = serializers.IntegerField(default=1)
+    xp      = serializers.IntegerField(default=0)
+    wins    = serializers.IntegerField(default=0)
+    losses  = serializers.IntegerField(default=0)
+    badges  = serializers.ListField(child=serializers.CharField(), default=[])
+    rank    = serializers.CharField(default='Novice')
+    role    = serializers.CharField(default='STUDENT')
+
+    def get_id(self, obj):
+        return str(obj.id)
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
