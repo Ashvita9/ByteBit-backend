@@ -24,7 +24,7 @@ pyasn1==0.6.2
 pyasn1_modules==0.4.2
 pycparser==3.0
 pymongo==4.16.0
-pyopenssl==25.3.0
+pyopenssl==24.0.0
 python-dotenv==1.2.1
 redis==7.2.1
 service-identity==24.2.0
