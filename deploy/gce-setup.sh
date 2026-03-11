@@ -124,29 +124,26 @@ nginx -t && echo "✓ Nginx config valid"
 systemctl enable nginx
 
 # ── 10. SSH key for GitHub Actions deploys ────────────────────────────────────
-# Creates a dedicated deploy key pair in the bytebit user's home.
-# Add the PUBLIC key contents to: GCE VM → ~/.ssh/authorized_keys
-# Add the PRIVATE key as the GitHub secret GCE_SSH_KEY.
-DEPLOY_KEY="$APP_HOME/.ssh/deploy_ed25519"
-mkdir -p "$APP_HOME/.ssh"
-chown "$APP_USER:$APP_USER" "$APP_HOME/.ssh"
-chmod 700 "$APP_HOME/.ssh"
+DEPLOY_KEY="/home/$APP_USER/.ssh/deploy_ed25519"
+mkdir -p "/home/$APP_USER/.ssh"
+chown "$APP_USER:$APP_USER" "/home/$APP_USER/.ssh"
+chmod 700 "/home/$APP_USER/.ssh"
 
 if [ ! -f "$DEPLOY_KEY" ]; then
     sudo -u "$APP_USER" ssh-keygen -t ed25519 -f "$DEPLOY_KEY" -N "" -C "bytebit-github-actions"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo " Deploy key generated."
-    echo " PUBLIC KEY (add to authorized_keys on this VM):"
+    echo " PUBLIC KEY (already added to authorized_keys on this VM):"
     cat "${DEPLOY_KEY}.pub"
     echo ""
     echo " PRIVATE KEY (add as GitHub secret GCE_SSH_KEY):"
     cat "$DEPLOY_KEY"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     # Auto-authorise the key on this VM
-    cat "${DEPLOY_KEY}.pub" >> "$APP_HOME/.ssh/authorized_keys"
-    chmod 600 "$APP_HOME/.ssh/authorized_keys"
-    chown "$APP_USER:$APP_USER" "$APP_HOME/.ssh/authorized_keys"
+    cat "${DEPLOY_KEY}.pub" >> "/home/$APP_USER/.ssh/authorized_keys"
+    chmod 600 "/home/$APP_USER/.ssh/authorized_keys"
+    chown "$APP_USER:$APP_USER" "/home/$APP_USER/.ssh/authorized_keys"
 fi
 
 # ── Done ─────────────────────────────────────────────────────────────────────
