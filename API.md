@@ -1,6 +1,6 @@
 # ByteBit API Reference
 
-**Base URL:** `http://35.200.152.58/api`  
+**Base URL:** `https://bytebitsbackend.duckdns.org/api`  
 **Auth:** JWT Bearer token — include `Authorization: Bearer <access_token>` on protected routes.
 
 ---
@@ -12,7 +12,7 @@
 | GET | `/api/health/` | None |
 
 ```bash
-curl http://35.200.152.58/api/health/
+curl https://bytebitsbackend.duckdns.org/api/health/
 ```
 
 ---
@@ -212,10 +212,10 @@ All `/api/admin/*` routes require a superuser account.
 
 ## WebSocket
 
-Connect to `ws://35.200.152.58/ws/arena/<room_id>/` with a valid JWT.
+Connect to `wss://bytebitsbackend.duckdns.org/ws/arena/<room_id>/` with a valid JWT.
 
 ```js
-const ws = new WebSocket('ws://35.200.152.58/ws/arena/ROOM_ID/');
+const ws = new WebSocket('wss://bytebitsbackend.duckdns.org/ws/arena/ROOM_ID/');
 ws.onopen = () => ws.send(JSON.stringify({ type: 'join', token: '<access_token>' }));
 ```
 
