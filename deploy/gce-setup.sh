@@ -69,14 +69,15 @@ echo "$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart bytebit-backend, /bin
 chmod 440 /etc/sudoers.d/bytebit-backend
 
 # ── 4. Clone the repository ───────────────────────────────────────────────────
-mkdir -p "$APP_HOME"
-chown "$APP_USER:$APP_USER" "$APP_HOME"
+# $BACKEND_DIR = /opt/bytebit/app/ByteBit-backend  (repo root lands here)
+mkdir -p "$APP_REPO"
+chown -R "$APP_USER:$APP_USER" "$APP_HOME"
 
-if [ -d "$APP_REPO/.git" ]; then
+if [ -d "$BACKEND_DIR/.git" ]; then
     echo "ℹ Repo already cloned, skipping clone"
 else
-    sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO_URL" "$APP_REPO"
-    echo "✓ Repo cloned to $APP_REPO"
+    sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO_URL" "$BACKEND_DIR"
+    echo "✓ Repo cloned to $BACKEND_DIR"
 fi
 
 # ── 5. Python virtual environment + dependencies ──────────────────────────────
