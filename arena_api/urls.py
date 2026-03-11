@@ -50,6 +50,7 @@ urlpatterns = [
     path('admin/tickets/',                        views.admin_tickets,          name='admin-tickets'),
     path('admin/tickets/<str:ticket_id>/',        views.admin_ticket_action,    name='admin-ticket-action'),
     path('admin/announcements/',                  views.admin_announcements,    name='admin-announcements'),
+    path('admin/announcements/<str:aid>/',        views.admin_announcement_action, name='admin-announcements-action'),
     path('admin/logs/',                           views.admin_logs,             name='admin-logs'),
 
     # Public announcements (for students/teachers bell icon)
