@@ -4,9 +4,9 @@
 # =============================================================================
 set -euo pipefail
 
-APP_DIR="/var/www/ByteBit-backend"
-VENV="$APP_DIR/venv"
-ENV_FILE="$APP_DIR/.env"
+APP_DIR="/opt/bytebit/app/ByteBit-backend"
+VENV="/opt/bytebit/venv"
+ENV_FILE="/opt/bytebit/.env"
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S %Z')
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

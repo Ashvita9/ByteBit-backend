@@ -147,6 +147,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://byte-bit-frontend.vercel.app",
     "https://bytebit-backend-9gvw.onrender.com",
     "http://34.14.179.50",
+    "http://35.200.152.58",
 ] + [o.strip() for o in _extra_csrf.split(',') if o.strip()]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

@@ -1,17 +1,17 @@
 [Unit]
 Description=ByteBit Backend (Daphne ASGI)
-After=network.target
+After=network.target redis-server.service
 
 [Service]
 Type=simple
-User=ashvitakoli
-Group=ashvitakoli
-WorkingDirectory=/var/www/ByteBit-backend
+User=bytebit
+Group=bytebit
+WorkingDirectory=/opt/bytebit/app/ByteBit-backend
 
 # Load all env vars from the secrets file
-EnvironmentFile=/var/www/ByteBit-backend/.env
+EnvironmentFile=/opt/bytebit/.env
 
-ExecStart=/var/www/ByteBit-backend/venv/bin/daphne \
+ExecStart=/opt/bytebit/venv/bin/daphne \
     -b 127.0.0.1 \
     -p 8000 \
     --access-log - \
