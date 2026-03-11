@@ -1,0 +1,41 @@
+name: Deploy to GCE
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 35.200.152.58
+          username: bytebit
+          key: ${{ secrets.GCE_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/bytebit/app/ByteBit-backend
+
+            # Pull latest code
+            git fetch --all --prune
+            git reset --hard origin/main
+            echo "✓ Code updated: $(git log -1 --format='%h %s')"
+
+            # Update dependencies if requirements changed
+            /opt/bytebit/venv/bin/pip install -q --upgrade pip
+            /opt/bytebit/venv/bin/pip install -q -r requirements.txt
+
+            # Collect static files
+            set -a; source /opt/bytebit/.env; set +a
+            /opt/bytebit/venv/bin/python manage.py collectstatic --no-input -v 0
+
+            # Restart the service
+            sudo /bin/systemctl restart bytebit-backend
+            sleep 3
+
+            # Verify it came back up
+            systemctl is-active --quiet bytebit-backend \
+              && echo "✓ bytebit-backend is running" \
+              || (echo "✗ Service failed to start" && journalctl -u bytebit-backend -n 20 --no-pager && exit 1)
