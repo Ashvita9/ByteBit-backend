@@ -1,6 +1,6 @@
 ﻿import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, viewsets
@@ -1057,6 +1057,10 @@ def admin_announcements(request):
         return Response({'error': 'Forbidden'}, status=403)
         
     if request.method == 'GET':
+        # Auto-delete broadcasts older than 30 days
+        cutoff = datetime.now() - timedelta(days=30)
+        GlobalAnnouncement.objects.filter(created_at__lt=cutoff).delete()
+        
         posts = GlobalAnnouncement.objects.all().order_by('-isPinned', '-created_at')
         return Response([{
             'id': str(p.id),
@@ -1120,6 +1124,10 @@ def public_announcements(request):
     except Exception:
         if request.user.is_superuser:
             user_role = 'ADMIN'
+
+    # Auto-delete broadcasts older than 30 days
+    cutoff = datetime.now() - timedelta(days=30)
+    GlobalAnnouncement.objects.filter(created_at__lt=cutoff).delete()
 
     posts = GlobalAnnouncement.objects.all().order_by('-isPinned', '-created_at')
     result = []
