@@ -141,12 +141,10 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
-# Extend trusted origins from env (comma-separated) — always include the GCE host and Vercel
+# Extend trusted origins from env (comma-separated)
 _extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
 CSRF_TRUSTED_ORIGINS = [
     "https://byte-bit-frontend.vercel.app",
-    "https://bytebit-backend-9gvw.onrender.com",
-    "http://34.14.179.50",
     "http://35.200.152.58",
 ] + [o.strip() for o in _extra_csrf.split(',') if o.strip()]
 
