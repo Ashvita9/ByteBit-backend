@@ -176,21 +176,18 @@ MIGRATION_MODULES = {
 }
 
 # MongoEngine connection for app-level Document models
+# Wrapped in try/except so management commands (collectstatic, etc.) don't
+# crash during deployment when the real URI isn't available yet.
 import mongoengine
 mongo_uri = os.getenv('MONGO_URI') or os.getenv('MONGODB_URI')
-if mongo_uri:
+try:
     mongoengine.connect(
         db='bytebit_db',
-        host=mongo_uri,
+        host=mongo_uri or 'mongodb://localhost:27017',
         alias='default'
     )
-else:
-    print("WARNING: No MongoDB URI found. Set MONGO_URI or MONGODB_URI.")
-    mongoengine.connect(
-        db='bytebit_db',
-        host='mongodb://localhost:27017',
-        alias='default'
-    )
+except Exception as _me_exc:
+    print(f"WARNING: MongoEngine connect failed: {_me_exc}")
 
 
 # Password validation

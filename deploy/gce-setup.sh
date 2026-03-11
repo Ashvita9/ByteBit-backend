@@ -100,14 +100,14 @@ else
 fi
 
 # ── 7. Collect static files ───────────────────────────────────────────────────
-# Pass a plain (non-SRV) MONGO_URI so mongoengine.connect() skips DNS lookup.
-# The real URI is set later in /opt/bytebit/.env.
+# Use a plain local MONGO_URI so mongoengine never attempts an SRV DNS lookup.
 cd "$BACKEND_DIR"
 sudo -u "$APP_USER" env \
     DJANGO_SETTINGS_MODULE=backend.settings \
     DJANGO_SECRET_KEY=placeholder-build-key \
     DEBUG=False \
     MONGO_URI=mongodb://127.0.0.1:27017 \
+    MONGODB_URI=mongodb://127.0.0.1:27017 \
     "$VENV/bin/python" manage.py collectstatic --no-input -v 0
 echo "✓ Static files collected"
 
