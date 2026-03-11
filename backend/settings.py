@@ -17,7 +17,9 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+from dotenv import dotenv_values as _dotenv_values
 load_dotenv(BASE_DIR / '.env', override=True)
+_env_file_vals = _dotenv_values(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -161,7 +163,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django_mongodb_backend',
         'CLIENT': {
-            'host': os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
+            'host': _env_file_vals.get('MONGO_URI') or os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
         },
         'NAME': 'bytebit_db',
     }
