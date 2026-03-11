@@ -159,11 +159,13 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+_mongo_uri = _env_file_vals.get('MONGO_URI') or os.getenv('MONGO_URI', 'mongodb://localhost:27017')
 DATABASES = {
     'default': {
         'ENGINE': 'django_mongodb_backend',
+        'HOST': _mongo_uri,
         'CLIENT': {
-            'host': _env_file_vals.get('MONGO_URI') or os.getenv('MONGO_URI', 'mongodb://localhost:27017'),
+            'host': _mongo_uri,
         },
         'NAME': 'bytebit_db',
     }
