@@ -58,4 +58,5 @@ urlpatterns = [
 
     # Teacher raises ticket
     path('tickets/raise/',                        views.raise_ticket,           name='raise-ticket'),
+    path('tickets/<str:ticket_id>/',              views.teacher_delete_ticket,  name='teacher-delete-ticket'),
 ]

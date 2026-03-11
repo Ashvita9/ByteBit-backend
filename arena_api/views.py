@@ -790,6 +790,20 @@ def raise_ticket(request):
     return Response({'status': 'raised', 'ticket_id': str(ticket.id)}, status=201)
 
 
+@api_view(['DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def teacher_delete_ticket(request, ticket_id):
+    """Allow the teacher who raised a ticket to delete it."""
+    try:
+        t = Ticket.objects.get(id=ticket_id)
+    except Exception:
+        return Response({'error': 'Ticket not found'}, status=404)
+    if str(t.raised_by_id) != str(request.user.id):
+        return Response({'error': 'You can only delete tickets you raised'}, status=403)
+    t.delete()
+    return Response(status=204)
+
+
 # ── ADMIN: Users ─────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
