@@ -2,34 +2,32 @@
 # =============================================================================
 # ByteBit Backend — GCE One-Time VM Bootstrap
 # =============================================================================
-# Run ONCE on a fresh GCE Ubuntu 22.04 / Debian 12 instance as root:
+# 1. Clone the repo FIRST, then run this script from inside it:
 #
-#   sudo bash gce-setup.sh <GITHUB_REPO_URL> [BRANCH]
-#
-# Example:
-#   sudo bash gce-setup.sh https://github.com/YOU/ByteBit.git main
+#   git clone https://github.com/Ashvita9/ByteBit-backend.git
+#   sudo bash ByteBit-backend/deploy/gce-setup.sh
 #
 # After this script finishes:
-#   1. Edit /opt/bytebit/.env  (copy gce.env.example and fill in values)
-#   2. Edit /etc/nginx/sites-available/bytebit-backend  (set your IP/domain)
-#   3. sudo systemctl enable --now bytebit-backend
-#   4. sudo systemctl reload nginx
+#   1. Fill in /opt/bytebit/.env  (MONGO_URI, DJANGO_SECRET_KEY, etc.)
+#   2. sudo systemctl enable --now bytebit-backend
+#   3. sudo systemctl reload nginx
 # =============================================================================
 set -euo pipefail
 
-REPO_URL="${1:?Usage: sudo bash gce-setup.sh <GITHUB_REPO_URL> [BRANCH]}"
-BRANCH="${2:-main}"
+# Resolve the repo root from this script's own location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEPLOY_SRC="$SCRIPT_DIR"
 
 APP_HOME="/opt/bytebit"
 APP_REPO="$APP_HOME/app"
 VENV="$APP_HOME/venv"
 APP_USER="bytebit"
-BACKEND_DIR="$APP_REPO/ByteBit-backend"
-DEPLOY_SRC="$BACKEND_DIR/deploy"
+DEST_DIR="$APP_REPO/ByteBit-backend"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " ByteBit GCE Bootstrap"
-echo " Repo: $REPO_URL  Branch: $BRANCH"
+echo " Source: $BACKEND_DIR"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # ── 1. System packages ────────────────────────────────────────────────────────
@@ -68,17 +66,20 @@ echo "$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart bytebit-backend, /bin
     > /etc/sudoers.d/bytebit-backend
 chmod 440 /etc/sudoers.d/bytebit-backend
 
-# ── 4. Clone the repository ───────────────────────────────────────────────────
-# $BACKEND_DIR = /opt/bytebit/app/ByteBit-backend  (repo root lands here)
+# ── 4. Copy repo to its permanent home ───────────────────────────────────────
 mkdir -p "$APP_REPO"
-chown -R "$APP_USER:$APP_USER" "$APP_HOME"
-
-if [ -d "$BACKEND_DIR/.git" ]; then
-    echo "ℹ Repo already cloned, skipping clone"
+if [ "$(realpath "$BACKEND_DIR")" = "$(realpath "$DEST_DIR" 2>/dev/null || echo NONE)" ]; then
+    echo "ℹ Repo already at $DEST_DIR, skipping copy"
 else
-    sudo -u "$APP_USER" git clone --branch "$BRANCH" "$REPO_URL" "$BACKEND_DIR"
-    echo "✓ Repo cloned to $BACKEND_DIR"
+    cp -a "$BACKEND_DIR" "$DEST_DIR"
+    echo "✓ Repo copied to $DEST_DIR"
 fi
+chown -R "$APP_USER:$APP_USER" "$APP_HOME"
+echo "✓ Ownership set on $APP_HOME"
+
+# From here on use DEST_DIR as the canonical path
+BACKEND_DIR="$DEST_DIR"
+DEPLOY_SRC="$BACKEND_DIR/deploy"
 
 # ── 5. Python virtual environment + dependencies ──────────────────────────────
 sudo -u "$APP_USER" python3.12 -m venv "$VENV"
@@ -150,10 +151,11 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " Bootstrap complete. Next steps:"
 echo ""
-echo " 1. Edit $APP_HOME/.env  (fill in MONGO_URI, REDIS_URL, etc.)"
-echo " 2. Edit /etc/nginx/sites-available/bytebit-backend"
-echo "    → replace YOUR_DOMAIN_OR_IP"
+echo " 1. sudo nano $APP_HOME/.env"
+echo "    → fill in DJANGO_SECRET_KEY, MONGO_URI (required)"
+echo " 2. sudo -u bytebit bash -c 'set -a; source $APP_HOME/.env; set +a;\
+echo "     $VENV/bin/python $BACKEND_DIR/manage.py migrate --run-syncdb'"
 echo " 3. sudo systemctl enable --now bytebit-backend"
 echo " 4. sudo systemctl reload nginx"
-echo " 5. (Optional) sudo certbot --nginx -d your.domain.com"
+echo " 5. curl http://35.200.152.58/api/health/"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
