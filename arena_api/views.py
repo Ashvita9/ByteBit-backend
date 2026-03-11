@@ -100,13 +100,16 @@ class UserRegistrationView(generics.CreateAPIView):
 def create_teacher(request):
     username = request.data.get('username')
     email = request.data.get('email', '')
+    password = request.data.get('password', '').strip()
 
     if not username:
         return Response({'error': 'Username is required'}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username=username).exists():
         return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
-    password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    if not password:
+        password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+
     user = User.objects.create_user(username=username, email=email, password=password)
     user.is_staff = True
     user.save()
@@ -1079,6 +1082,29 @@ def admin_announcements(request):
             'title': p.title,
             'isPinned': p.isPinned
         }, status=201)
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def admin_announcement_action(request, aid):
+    if not _is_admin(request):
+        return Response({'error': 'Forbidden'}, status=403)
+        
+    try:
+        p = GlobalAnnouncement.objects.get(id=aid)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+        
+    if request.method == 'PATCH':
+        is_pinned = request.data.get('isPinned')
+        if is_pinned is not None:
+            p.isPinned = is_pinned
+            p.save()
+            return Response({'status': 'updated'})
+        return Response({'error': 'No update data provided'}, status=400)
+        
+    if request.method == 'DELETE':
+        p.delete()
+        return Response({'status': 'deleted'})
 
 
 # ── Public Announcements (for students/teachers) ────────────────────────────
