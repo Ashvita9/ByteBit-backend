@@ -14,7 +14,8 @@ from django.contrib.auth.models import User
 from .models import (
     CodingTask, CoderProfile, BattleRoom,
     Submission, Classroom, Announcement, Ticket, ActionLog,
-    GlobalAnnouncement, UserNotification, FriendRequest
+    GlobalAnnouncement, UserNotification, FriendRequest,
+    Tournament, TournamentQuestion, TournamentMatch, gen_code,
 )
 from .serializers import (
     CodingTaskSerializer,
@@ -1501,3 +1502,343 @@ def public_announcements(request):
                 'createdAt': p.created_at.isoformat()
             })
     return Response(result)
+
+
+# ── Tournaments ────────────────────────────────────────────────────────────────
+
+import uuid
+
+
+def _tournament_data(t):
+    """Serialize a Tournament document to a plain dict."""
+    def _match_data(m):
+        return {
+            'matchId':         m.match_id,
+            'roundNum':        m.round_num,
+            'player1Id':       m.player1_id,
+            'player1Username': m.player1_username,
+            'player2Id':       m.player2_id,
+            'player2Username': m.player2_username,
+            'winnerId':        m.winner_id,
+            'winnerUsername':  m.winner_username,
+            'status':          m.status,
+            'questionIndex':   m.question_index,
+        }
+
+    def _question_data(q):
+        return {
+            'title':       q.title,
+            'description': q.description,
+            'difficulty':  q.difficulty,
+            'testCases': [
+                {'input': tc.input, 'expected_output': tc.expected_output}
+                for tc in q.test_cases
+            ],
+        }
+
+    return {
+        'id':                  str(t.id),
+        'name':                t.name,
+        'code':                t.code,
+        'teacherId':           t.teacher_id,
+        'teacherUsername':     t.teacher_username,
+        'questions':           [_question_data(q) for q in t.questions],
+        'participantIds':      list(t.participant_ids),
+        'participantUsernames': dict(t.participant_usernames),
+        'matches':             [_match_data(m) for m in t.matches],
+        'currentRound':        t.current_round,
+        'status':              t.status,
+        'winnerId':            t.winner_id,
+        'winnerUsername':      t.winner_username,
+        'maxPlayers':          t.max_players,
+        'createdAt':           t.created_at.isoformat(),
+    }
+
+
+def _generate_round(participant_ids, participant_usernames, round_num, questions_count):
+    """Pair participants randomly; odd one out gets a bye."""
+    shuffled = list(participant_ids)
+    random.shuffle(shuffled)
+    matches = []
+    for i in range(0, len(shuffled), 2):
+        p1_id = shuffled[i]
+        match_id = f"R{round_num}M{i // 2 + 1}"
+        q_index = random.randint(0, max(0, questions_count - 1))
+        if i + 1 < len(shuffled):
+            p2_id = shuffled[i + 1]
+            m = TournamentMatch(
+                match_id=match_id,
+                round_num=round_num,
+                player1_id=p1_id,
+                player1_username=participant_usernames.get(p1_id, ''),
+                player2_id=p2_id,
+                player2_username=participant_usernames.get(p2_id, ''),
+                status='pending',
+                question_index=q_index,
+            )
+        else:
+            # Bye: player advances automatically
+            m = TournamentMatch(
+                match_id=match_id,
+                round_num=round_num,
+                player1_id=p1_id,
+                player1_username=participant_usernames.get(p1_id, ''),
+                player2_id='',
+                player2_username='',
+                winner_id=p1_id,
+                winner_username=participant_usernames.get(p1_id, ''),
+                status='bye',
+                question_index=q_index,
+            )
+        matches.append(m)
+    return matches
+
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def create_tournament(request):
+    """POST /api/tournaments/ — teacher creates a new tournament."""
+    name        = request.data.get('name', '').strip()
+    max_players = int(request.data.get('maxPlayers', 10))
+    if not name:
+        return Response({'error': 'name required'}, status=400)
+
+    code = gen_code(6)
+    t = Tournament(
+        name=name,
+        code=code,
+        teacher_id=str(request.user.id),
+        teacher_username=request.user.username,
+        max_players=max(2, min(max_players, 32)),
+    )
+    t.save()
+    return Response(_tournament_data(t), status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsTeacher])
+def my_tournaments(request):
+    """GET /api/tournaments/my/ — list teacher's tournaments."""
+    ts = Tournament.objects.filter(teacher_id=str(request.user.id))
+    return Response([_tournament_data(t) for t in ts])
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def joined_tournaments(request):
+    """GET /api/tournaments/joined/ — student's joined tournaments."""
+    uid = str(request.user.id)
+    ts = Tournament.objects.filter(participant_ids=uid)
+    return Response([_tournament_data(t) for t in ts])
+
+
+@api_view(['GET', 'DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def tournament_detail(request, tournament_id):
+    """GET/DELETE /api/tournaments/<id>/"""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+
+    if request.method == 'GET':
+        return Response(_tournament_data(t))
+
+    if request.method == 'DELETE':
+        if t.teacher_id != str(request.user.id) and not request.user.is_superuser:
+            return Response({'error': 'Forbidden'}, status=403)
+        t.delete()
+        return Response({'status': 'deleted'})
+
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def add_tournament_question(request, tournament_id):
+    """POST /api/tournaments/<id>/questions/ — add a question."""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+    if t.teacher_id != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+
+    title       = request.data.get('title', '').strip()
+    description = request.data.get('description', '').strip()
+    difficulty  = request.data.get('difficulty', 'Easy')
+    raw_tc      = request.data.get('testCases', [])
+
+    if not title or not description:
+        return Response({'error': 'title and description required'}, status=400)
+
+    from .models import TestCase as TC
+    test_cases = [
+        TC(input=tc.get('input', ''), expected_output=tc.get('expected_output', ''))
+        for tc in raw_tc
+    ]
+    q = TournamentQuestion(
+        title=title,
+        description=description,
+        difficulty=difficulty,
+        test_cases=test_cases,
+    )
+    t.questions.append(q)
+    t.save()
+    return Response(_tournament_data(t))
+
+
+@api_view(['DELETE'])
+@permission_classes([IsTeacher])
+def remove_tournament_question(request, tournament_id, q_idx):
+    """DELETE /api/tournaments/<id>/questions/<idx>/"""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+    if t.teacher_id != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+
+    try:
+        q_idx = int(q_idx)
+        t.questions.pop(q_idx)
+    except (IndexError, ValueError):
+        return Response({'error': 'Invalid index'}, status=400)
+
+    t.save()
+    return Response(_tournament_data(t))
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def join_tournament(request):
+    """POST /api/tournaments/join/ — student joins with {code}."""
+    code = request.data.get('code', '').strip().upper()
+    if not code:
+        return Response({'error': 'code required'}, status=400)
+    try:
+        t = Tournament.objects.get(code=code)
+    except Exception:
+        return Response({'error': 'Tournament not found'}, status=404)
+
+    if t.status != 'waiting':
+        return Response({'error': 'Tournament has already started'}, status=400)
+
+    uid = str(request.user.id)
+    if uid in t.participant_ids:
+        return Response(_tournament_data(t))  # already joined
+
+    if len(t.participant_ids) >= t.max_players:
+        return Response({'error': 'Tournament is full'}, status=400)
+
+    t.participant_ids.append(uid)
+    usernames = dict(t.participant_usernames)
+    usernames[uid] = request.user.username
+    t.participant_usernames = usernames
+    t.save()
+    return Response(_tournament_data(t))
+
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def start_tournament(request, tournament_id):
+    """POST /api/tournaments/<id>/start/ — generate round 1 bracket."""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+    if t.teacher_id != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+    if t.status != 'waiting':
+        return Response({'error': 'Tournament already started'}, status=400)
+    if len(t.participant_ids) < 2:
+        return Response({'error': 'Need at least 2 participants'}, status=400)
+    if len(t.questions) == 0:
+        return Response({'error': 'Add at least one question before starting'}, status=400)
+
+    t.current_round = 1
+    t.status = 'active'
+    t.matches = _generate_round(
+        t.participant_ids,
+        dict(t.participant_usernames),
+        1,
+        len(t.questions),
+    )
+    t.save()
+    return Response(_tournament_data(t))
+
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def advance_tournament(request, tournament_id):
+    """POST /api/tournaments/<id>/advance/ — collect winners of current round and start next."""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+    if t.teacher_id != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+    if t.status != 'active':
+        return Response({'error': 'Tournament not active'}, status=400)
+
+    current_matches = [m for m in t.matches if m.round_num == t.current_round]
+    # All current-round matches must be resolved (done or bye)
+    unresolved = [m for m in current_matches if m.status not in ('done', 'bye')]
+    if unresolved:
+        return Response({
+            'error': 'Not all matches are finished yet',
+            'pending': [m.match_id for m in unresolved],
+        }, status=400)
+
+    winners = [m.winner_id for m in current_matches if m.winner_id]
+
+    if len(winners) == 1:
+        # Tournament over — we have a champion
+        t.status = 'done'
+        t.winner_id = winners[0]
+        t.winner_username = dict(t.participant_usernames).get(winners[0], '')
+        t.save()
+        return Response(_tournament_data(t))
+
+    next_round = t.current_round + 1
+    new_matches = _generate_round(
+        winners,
+        dict(t.participant_usernames),
+        next_round,
+        len(t.questions),
+    )
+    t.matches = list(t.matches) + new_matches
+    t.current_round = next_round
+    t.save()
+    return Response(_tournament_data(t))
+
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def decide_match_winner(request, tournament_id, match_id):
+    """POST /api/tournaments/<id>/matches/<match_id>/decide/ — teacher resolves a tie."""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+    if t.teacher_id != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+
+    winner_id = request.data.get('winnerId', '').strip()
+    if not winner_id:
+        return Response({'error': 'winnerId required'}, status=400)
+
+    updated = False
+    for m in t.matches:
+        if m.match_id == match_id:
+            if winner_id not in (m.player1_id, m.player2_id):
+                return Response({'error': 'winnerId is not a participant in this match'}, status=400)
+            m.winner_id = winner_id
+            m.winner_username = dict(t.participant_usernames).get(winner_id, '')
+            m.status = 'done'
+            updated = True
+            break
+
+    if not updated:
+        return Response({'error': 'Match not found'}, status=404)
+
+    t.save()
+    return Response(_tournament_data(t))

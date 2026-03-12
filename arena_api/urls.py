@@ -74,4 +74,16 @@ urlpatterns = [
     # Per-user notifications (grading review, marks assigned)
     path('user-notifications/',                   views.user_notifications,          name='user-notifications'),
     path('user-notifications/<str:notif_id>/read/', views.mark_notification_read,   name='mark-notification-read'),
+
+    # Tournaments
+    path('tournaments/',                                                      views.create_tournament,         name='tournament-create'),
+    path('tournaments/my/',                                                   views.my_tournaments,            name='tournament-my'),
+    path('tournaments/joined/',                                               views.joined_tournaments,        name='tournament-joined'),
+    path('tournaments/join/',                                                 views.join_tournament,           name='tournament-join'),
+    path('tournaments/<str:tournament_id>/',                                  views.tournament_detail,         name='tournament-detail'),
+    path('tournaments/<str:tournament_id>/questions/',                        views.add_tournament_question,   name='tournament-add-question'),
+    path('tournaments/<str:tournament_id>/questions/<int:q_idx>/',            views.remove_tournament_question, name='tournament-remove-question'),
+    path('tournaments/<str:tournament_id>/start/',                            views.start_tournament,          name='tournament-start'),
+    path('tournaments/<str:tournament_id>/advance/',                          views.advance_tournament,        name='tournament-advance'),
+    path('tournaments/<str:tournament_id>/matches/<str:match_id>/decide/',    views.decide_match_winner,       name='tournament-decide'),
 ]

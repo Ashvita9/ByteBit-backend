@@ -1,7 +1,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import CoderProfile, CodingTask, Submission
+from .models import CoderProfile, CodingTask, Submission, Tournament
 
 
 class BattleConsumer(AsyncWebsocketConsumer):
@@ -168,3 +168,297 @@ class BattleConsumer(AsyncWebsocketConsumer):
             profile.save()
         except Exception as e:
             print(f'Error updating stats: {e}')
+
+
+# ── Tournament Consumer ────────────────────────────────────────────────────────
+
+class TournamentConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket handler for a single tournament match.
+    URL pattern: ws/tournament/<tournament_id>/match/<match_id>/
+    Group name:  tournament_<tournament_id>_match_<match_id>
+
+    Events accepted (client → server):
+      { type: "join" }
+      { type: "code_submit", code: "...", language: "python" }
+      { type: "teacher_decide", winner_id: "..." }   (teacher only)
+
+    Events broadcast (server → clients):
+      { type: "question_data", question: {...} }
+      { type: "players_ready", players: [...] }
+      { type: "code_result", results: [...], passed: bool, userId: "..." }
+      { type: "match_won", winnerId: "...", winnerUsername: "..." }
+      { type: "error", message: "..." }
+    """
+
+    async def connect(self):
+        self.tournament_id = self.scope['url_route']['kwargs']['tournament_id']
+        self.match_id      = self.scope['url_route']['kwargs']['match_id']
+        self.group_name    = f'tournament_{self.tournament_id}_match_{self.match_id}'
+        self.user          = self.scope.get('user')
+
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+        if self.user and self.user.is_authenticated:
+            # Send question data to the newly connected player
+            question, players = await self.get_match_context()
+            if question:
+                await self.send(text_data=json.dumps({
+                    'type':     'question_data',
+                    'question': question,
+                }))
+            await self.channel_layer.group_send(
+                self.group_name,
+                {'type': 'players_ready', 'players': players}
+            )
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive(self, text_data):
+        try:
+            data     = json.loads(text_data)
+            msg_type = data.get('type')
+
+            if msg_type == 'code_submit':
+                await self.handle_code_submit(data)
+            elif msg_type == 'teacher_decide':
+                await self.handle_teacher_decide(data)
+        except Exception as e:
+            await self.send(text_data=json.dumps({'type': 'error', 'message': str(e)}))
+
+    # ── Handlers ──────────────────────────────────────────────────────────────
+
+    async def handle_code_submit(self, data):
+        code     = data.get('code', '')
+        language = data.get('language', 'python')
+
+        if not self.user or not self.user.is_authenticated:
+            return
+
+        results, passed = await self.run_code_against_match(code, language)
+
+        # Broadcast result to both players
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                'type':    'code_result',
+                'results': results,
+                'passed':  passed,
+                'userId':  str(self.user.id),
+                'username': self.user.username,
+            }
+        )
+
+        if passed:
+            winner_id, winner_username = await self.mark_match_winner(str(self.user.id))
+            if winner_id:
+                await self.channel_layer.group_send(
+                    self.group_name,
+                    {
+                        'type':            'match_won',
+                        'winnerId':        winner_id,
+                        'winnerUsername':  winner_username,
+                    }
+                )
+
+    async def handle_teacher_decide(self, data):
+        """Teacher manually picks the winner of this match."""
+        if not self.user or not self.user.is_authenticated:
+            return
+        winner_id = data.get('winner_id', '')
+        if not winner_id:
+            return
+
+        winner_id, winner_username = await self.force_match_winner(winner_id)
+        if winner_id:
+            await self.channel_layer.group_send(
+                self.group_name,
+                {
+                    'type':           'match_won',
+                    'winnerId':       winner_id,
+                    'winnerUsername': winner_username,
+                    'decidedByTeacher': True,
+                }
+            )
+
+    # ── Group event handlers (channel layer → WebSocket) ─────────────────────
+
+    async def players_ready(self, event):
+        await self.send(text_data=json.dumps({
+            'type':    'players_ready',
+            'players': event['players'],
+        }))
+
+    async def code_result(self, event):
+        await self.send(text_data=json.dumps({
+            'type':     'code_result',
+            'results':  event['results'],
+            'passed':   event['passed'],
+            'userId':   event['userId'],
+            'username': event['username'],
+        }))
+
+    async def match_won(self, event):
+        await self.send(text_data=json.dumps({
+            'type':             'match_won',
+            'winnerId':         event['winnerId'],
+            'winnerUsername':   event['winnerUsername'],
+            'decidedByTeacher': event.get('decidedByTeacher', False),
+        }))
+
+    # ── DB helpers ────────────────────────────────────────────────────────────
+
+    @database_sync_to_async
+    def get_match_context(self):
+        """Return (question_dict, players_list) for this match."""
+        try:
+            t = Tournament.objects.get(id=self.tournament_id)
+        except Exception:
+            return None, []
+
+        match = next((m for m in t.matches if m.match_id == self.match_id), None)
+        if not match:
+            return None, []
+
+        question = None
+        if t.questions and match.question_index < len(t.questions):
+            q = t.questions[match.question_index]
+            question = {
+                'title':       q.title,
+                'description': q.description,
+                'difficulty':  q.difficulty,
+                'testCases': [
+                    {'input': tc.input, 'expected_output': tc.expected_output}
+                    for tc in q.test_cases
+                ],
+            }
+
+        players = []
+        usernames = dict(t.participant_usernames)
+        for pid in [match.player1_id, match.player2_id]:
+            if pid:
+                players.append({'id': pid, 'username': usernames.get(pid, pid)})
+
+        return question, players
+
+    @database_sync_to_async
+    def run_code_against_match(self, code, language):
+        """Run code against the match question's test cases; return (results, all_passed)."""
+        import subprocess, tempfile, os
+
+        try:
+            t = Tournament.objects.get(id=self.tournament_id)
+        except Exception:
+            return [], False
+
+        match = next((m for m in t.matches if m.match_id == self.match_id), None)
+        if not match or not t.questions:
+            return [], False
+
+        q = t.questions[match.question_index] if match.question_index < len(t.questions) else None
+        if not q:
+            return [], False
+
+        results = []
+        all_passed = True
+
+        for tc in q.test_cases:
+            try:
+                if language == 'python':
+                    with tempfile.NamedTemporaryFile(suffix='.py', mode='w',
+                                                     delete=False) as f:
+                        f.write(code)
+                        tmp = f.name
+                    proc = subprocess.run(
+                        ['python', tmp],
+                        input=tc.input, capture_output=True,
+                        text=True, timeout=5,
+                    )
+                    os.unlink(tmp)
+                    actual = proc.stdout.strip()
+                else:
+                    results.append({
+                        'input': tc.input,
+                        'expected': tc.expected_output,
+                        'actual': '',
+                        'passed': False,
+                        'error': f'Language {language} not supported'
+                    })
+                    all_passed = False
+                    continue
+
+                passed = (actual == tc.expected_output.strip())
+                if not passed:
+                    all_passed = False
+                results.append({
+                    'input': tc.input,
+                    'expected': tc.expected_output,
+                    'actual': actual,
+                    'passed': passed,
+                    'error': proc.stderr.strip() if proc.stderr else '',
+                })
+            except subprocess.TimeoutExpired:
+                all_passed = False
+                results.append({
+                    'input': tc.input,
+                    'expected': tc.expected_output,
+                    'actual': '',
+                    'passed': False,
+                    'error': 'Time Limit Exceeded',
+                })
+            except Exception as e:
+                all_passed = False
+                results.append({
+                    'input': tc.input,
+                    'expected': tc.expected_output,
+                    'actual': '',
+                    'passed': False,
+                    'error': str(e),
+                })
+
+        return results, all_passed
+
+    @database_sync_to_async
+    def mark_match_winner(self, user_id):
+        """Set the match winner if not already set. Returns (winner_id, winner_username)."""
+        try:
+            t = Tournament.objects.get(id=self.tournament_id)
+        except Exception:
+            return None, ''
+
+        for m in t.matches:
+            if m.match_id == self.match_id:
+                if m.winner_id:
+                    return None, ''   # already decided
+                # Verify this player is actually in the match
+                if user_id not in (m.player1_id, m.player2_id):
+                    return None, ''
+                m.winner_id = user_id
+                m.winner_username = dict(t.participant_usernames).get(user_id, '')
+                m.status = 'done'
+                t.save()
+                return m.winner_id, m.winner_username
+
+        return None, ''
+
+    @database_sync_to_async
+    def force_match_winner(self, winner_id):
+        """Teacher-forced winner. Returns (winner_id, winner_username)."""
+        try:
+            t = Tournament.objects.get(id=self.tournament_id)
+        except Exception:
+            return None, ''
+
+        for m in t.matches:
+            if m.match_id == self.match_id:
+                if winner_id not in (m.player1_id, m.player2_id):
+                    return None, ''
+                m.winner_id = winner_id
+                m.winner_username = dict(t.participant_usernames).get(winner_id, '')
+                m.status = 'done'
+                t.save()
+                return m.winner_id, m.winner_username
+
+        return None, ''

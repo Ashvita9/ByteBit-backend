@@ -242,3 +242,58 @@ class BattleRoom(Document):
 
     def __str__(self):
         return f"Room {self.room_code}"
+
+
+# ── Tournaments ────────────────────────────────────────────────────────────────
+
+class TournamentQuestion(EmbeddedDocument):
+    title       = fields.StringField(required=True)
+    description = fields.StringField(required=True)
+    difficulty  = fields.StringField(choices=["Easy", "Medium", "Hard"], default="Easy")
+    test_cases  = fields.ListField(fields.EmbeddedDocumentField(TestCase), default=[])
+
+
+class TournamentMatch(EmbeddedDocument):
+    match_id          = fields.StringField(required=True)   # e.g. "R1M1"
+    round_num         = fields.IntField(required=True)
+    player1_id        = fields.StringField(default='')
+    player1_username  = fields.StringField(default='')
+    player2_id        = fields.StringField(default='')
+    player2_username  = fields.StringField(default='')
+    winner_id         = fields.StringField(default='')
+    winner_username   = fields.StringField(default='')
+    # pending → active → done | bye | tie
+    status            = fields.StringField(
+        choices=['pending', 'active', 'done', 'bye', 'tie'],
+        default='pending'
+    )
+    question_index    = fields.IntField(default=0)   # index into Tournament.questions
+
+
+class Tournament(Document):
+    name                 = fields.StringField(required=True)
+    code                 = fields.StringField(required=True)
+    teacher_id           = fields.StringField(required=True)
+    teacher_username     = fields.StringField(default='')
+    questions            = fields.ListField(
+        fields.EmbeddedDocumentField(TournamentQuestion), default=[]
+    )
+    participant_ids      = fields.ListField(fields.StringField(), default=[])
+    participant_usernames = fields.DictField(default={})   # user_id → username
+    matches              = fields.ListField(
+        fields.EmbeddedDocumentField(TournamentMatch), default=[]
+    )
+    current_round        = fields.IntField(default=0)
+    # waiting → active → done
+    status               = fields.StringField(
+        choices=['waiting', 'active', 'done'], default='waiting'
+    )
+    winner_id            = fields.StringField(default='')
+    winner_username      = fields.StringField(default='')
+    max_players          = fields.IntField(default=10)
+    created_at           = fields.DateTimeField(default=datetime.utcnow)
+
+    meta = {'collection': 'tournaments', 'ordering': ['-created_at']}
+
+    def __str__(self):
+        return self.name
