@@ -188,6 +188,10 @@ def _classroom_data(c, include_students=False):
         'is_locked': c.is_locked,
         'sequential_labs': getattr(c, 'sequential_labs', False),
         'created_at': c.created_at.isoformat() if c.created_at else None,
+        'announcements': [
+            {'message': a.message, 'created_at': a.created_at.isoformat(), 'pinned': a.pinned}
+            for a in (c.announcements or [])
+        ],
     }
     if include_students:
         students = []
@@ -455,11 +459,12 @@ def post_announcement(request, classroom_id):
     return Response({'status': 'posted'}, status=201)
 
 
-@api_view(['DELETE'])
+@api_view(['DELETE', 'PATCH'])
 @permission_classes([IsTeacher])
 def delete_announcement(request, classroom_id, ann_index):
-    """DELETE /api/classrooms/<id>/announcements/<index>/
-    Deletes a specific announcement by its list index.
+    """DELETE/PATCH /api/classrooms/<id>/announcements/<index>/
+    DELETE: removes the announcement.
+    PATCH:  toggles or sets pinned status (pass {"pinned": true/false}).
     """
     try:
         c = Classroom.objects.get(id=classroom_id)
@@ -472,6 +477,16 @@ def delete_announcement(request, classroom_id, ann_index):
     idx = int(ann_index)
     if idx < 0 or idx >= len(c.announcements):
         return Response({'error': 'Announcement not found'}, status=404)
+
+    if request.method == 'PATCH':
+        pinned = request.data.get('pinned')
+        if pinned is None:
+            # Toggle
+            c.announcements[idx].pinned = not c.announcements[idx].pinned
+        else:
+            c.announcements[idx].pinned = bool(pinned)
+        c.save()
+        return Response({'status': 'updated', 'pinned': c.announcements[idx].pinned}, status=200)
 
     c.announcements.pop(idx)
     c.save()
