@@ -28,6 +28,7 @@ urlpatterns = [
     path('classrooms/<str:classroom_id>/students/',         views.add_student_by_username, name='add-student'),
     path('classrooms/<str:classroom_id>/students/<str:student_id>/', views.remove_student, name='remove-student'),
     path('classrooms/<str:classroom_id>/announcements/',    views.post_announcement,      name='post-announcement'),
+    path('classrooms/<str:classroom_id>/announcements/<int:ann_index>/', views.delete_announcement, name='delete-announcement'),
     path('classrooms/<str:classroom_id>/tickets/',          views.tickets,                name='tickets'),
 
     # Battle

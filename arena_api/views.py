@@ -1,4 +1,4 @@
-﻿import random
+import random
 import string
 from datetime import datetime, timedelta
 
@@ -254,6 +254,8 @@ def classroom_detail(request, classroom_id):
                     'difficulty': t.difficulty,
                     'tech_stack': t.tech_stack,
                     'task_type': t.task_type,
+                    'lab_number': getattr(t, 'lab_number', 0) or 0,
+                    'linked_lab': getattr(t, 'linked_lab', 0) or 0,
                     'due_date': t.due_date.isoformat() if t.due_date else None,
                     'submissions_count': len(t.submissions),
                 })
@@ -429,6 +431,29 @@ def post_announcement(request, classroom_id):
     c.announcements.insert(0, ann)
     c.save()
     return Response({'status': 'posted'}, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsTeacher])
+def delete_announcement(request, classroom_id, ann_index):
+    """DELETE /api/classrooms/<id>/announcements/<index>/
+    Deletes a specific announcement by its list index.
+    """
+    try:
+        c = Classroom.objects.get(id=classroom_id)
+    except Exception:
+        return Response({'error': 'Classroom not found'}, status=404)
+
+    if str(c.teacher_id) != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+
+    idx = int(ann_index)
+    if idx < 0 or idx >= len(c.announcements):
+        return Response({'error': 'Announcement not found'}, status=404)
+
+    c.announcements.pop(idx)
+    c.save()
+    return Response({'status': 'deleted'}, status=200)
 
 
 # â”€â”€ Tickets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

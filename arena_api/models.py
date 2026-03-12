@@ -82,6 +82,10 @@ class CodingTask(Document):
     task_type     = fields.StringField(choices=["Mandatory", "CP"], default="Mandatory")
     classroom_id  = fields.StringField(required=False)
     is_final      = fields.BooleanField(default=False)
+    # Lab sequencing: Mandatory tasks get a lab_number (1,2,3...) for sequential unlock
+    lab_number    = fields.IntField(default=0)  # 0 = unassigned, 1+ = lab sequence
+    # Challenge Pack tasks link to a specific lab number
+    linked_lab    = fields.IntField(default=0)  # 0 = not linked, 1+ = linked to that lab
     hints         = fields.ListField(fields.StringField(), default=[])
     # Grading configuration set by teacher
     grading_mode  = fields.StringField(choices=["Percentage", "Marks", "Grade"], default="Percentage")

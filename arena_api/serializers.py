@@ -38,6 +38,8 @@ class CodingTaskSerializer(serializers.Serializer):
     task_type     = serializers.ChoiceField(choices=["Mandatory", "CP"], default="Mandatory")
     classroom_id  = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     is_final      = serializers.BooleanField(default=False)
+    lab_number    = serializers.IntegerField(default=0)
+    linked_lab    = serializers.IntegerField(default=0)
     hints         = serializers.ListField(child=serializers.CharField(), default=[])
     grading_mode  = serializers.ChoiceField(choices=["Percentage", "Marks", "Grade"], default="Percentage")
     max_marks     = serializers.FloatField(default=100.0)
