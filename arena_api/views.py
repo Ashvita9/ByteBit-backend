@@ -246,20 +246,38 @@ def classroom_detail(request, classroom_id):
             for a in c.announcements
         ]
         # Fetch associated tasks
+        req_user_id = str(request.user.id)
         tasks = []
         for tid in c.task_ids:
             try:
                 t = CodingTask.objects.get(id=tid)
+                # Include all of THIS student's submissions so the dashboard can show grade/completed card
+                my_subs = []
+                for s in (t.submissions or []):
+                    if str(getattr(s, 'user_id', '')) == req_user_id:
+                        my_subs.append({
+                            'user_id':        str(s.user_id),
+                            'passed':         s.passed,
+                            'score':          s.score,
+                            'marks_obtained': s.marks_obtained,
+                            'grade':          s.grade,
+                            'remarks':        s.remarks,
+                            'review_status':  s.review_status,
+                            'submitted_at':   s.submitted_at.isoformat() if getattr(s, 'submitted_at', None) else None,
+                        })
                 tasks.append({
                     'id': str(t.id),
                     'title': t.title,
                     'difficulty': t.difficulty,
                     'tech_stack': t.tech_stack,
                     'task_type': t.task_type,
+                    'grading_mode': getattr(t, 'grading_mode', 'Percentage'),
+                    'max_marks': float(getattr(t, 'max_marks', 100) or 100),
                     'lab_number': getattr(t, 'lab_number', 0) or 0,
                     'linked_lab': getattr(t, 'linked_lab', 0) or 0,
                     'due_date': t.due_date.isoformat() if t.due_date else None,
                     'submissions_count': len(t.submissions),
+                    'submissions': my_subs,
                 })
             except Exception:
                 pass
