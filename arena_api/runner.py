@@ -88,6 +88,52 @@ def run_javascript(code: str, input_data: str, expected_output: str) -> dict:
             pass
 
 
+def run_cpp(code: str, input_data: str, expected_output: str) -> dict:
+    """Compile and run C++ code; return result dict."""
+    import tempfile, os
+    tmp_dir = tempfile.mkdtemp()
+    src_path = os.path.join(tmp_dir, 'solution.cpp')
+    exe_path = os.path.join(tmp_dir, 'solution')
+    try:
+        with open(src_path, 'w', encoding='utf-8') as f:
+            f.write(code)
+        # Compile
+        compile_result = subprocess.run(
+            ['g++', '-std=c++17', '-O2', '-o', exe_path, src_path],
+            capture_output=True, text=True, timeout=15, encoding='utf-8',
+        )
+        if compile_result.returncode != 0:
+            return {
+                'passed': False,
+                'actual': '',
+                'expected': expected_output.strip(),
+                'stderr': 'Compilation error:\n' + compile_result.stderr.strip()[:600],
+            }
+        # Run
+        run_result = subprocess.run(
+            [exe_path],
+            input=input_data,
+            capture_output=True, text=True, timeout=TIMEOUT, encoding='utf-8',
+        )
+        actual = run_result.stdout.strip()
+        expected = expected_output.strip()
+        return {
+            'passed': actual == expected,
+            'actual': actual,
+            'expected': expected,
+            'stderr': run_result.stderr.strip()[:500] if run_result.stderr else '',
+        }
+    except subprocess.TimeoutExpired:
+        return {'passed': False, 'actual': '', 'expected': expected_output.strip(), 'stderr': 'Time limit exceeded (5s)'}
+    except FileNotFoundError:
+        return {'passed': False, 'actual': '', 'expected': expected_output.strip(), 'stderr': 'g++ compiler not found on server. Ask your admin to install build-essential.'}
+    except Exception as e:
+        return {'passed': False, 'actual': '', 'expected': expected_output.strip(), 'stderr': str(e)}
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def run_test_cases(code: str, language: str, test_cases: list) -> dict:
     """
     Run all test cases for a piece of code.
@@ -108,6 +154,8 @@ def run_test_cases(code: str, language: str, test_cases: list) -> dict:
             r = run_python(code, input_data, expected)
         elif lang_key in ('javascript', 'typescript', 'js', 'ts'):
             r = run_javascript(code, input_data, expected)
+        elif lang_key in ('c++', 'cpp', 'c plus plus', 'cplusplus'):
+            r = run_cpp(code, input_data, expected)
         elif lang_key == 'html':
             # For HTML, we simply check if the expected content is present in the code string.
             # Example: Expected output might be "<h1>" or "<div>".
