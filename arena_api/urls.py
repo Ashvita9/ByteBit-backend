@@ -20,6 +20,13 @@ urlpatterns = [
     # Profile
     path('me/',                    views.my_profile,                       name='my-profile'),
 
+    # Friends
+    path('friends/',                                        views.friends_list,            name='friends-list'),
+    path('friends/requests/',                               views.friend_requests_list,    name='friend-requests-list'),
+    path('friends/request/',                                views.send_friend_request,     name='send-friend-request'),
+    path('friends/requests/<str:req_id>/accept/',           views.accept_friend_request,   name='accept-friend-request'),
+    path('friends/requests/<str:req_id>/decline/',          views.decline_friend_request,  name='decline-friend-request'),
+
     # Classrooms
     path('classrooms/',                                     views.classrooms,             name='classrooms'),
     path('classrooms/my/',                                  views.my_classrooms,          name='my-classrooms'),

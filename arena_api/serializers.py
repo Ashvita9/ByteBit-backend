@@ -80,6 +80,8 @@ class CoderProfileSerializer(serializers.Serializer):
     badges  = serializers.ListField(child=serializers.CharField(), default=[])
     rank    = serializers.CharField(default='Novice')
     role    = serializers.CharField(default='STUDENT')
+    age     = serializers.IntegerField(default=0)
+    gender  = serializers.CharField(default='')
 
     def get_id(self, obj):
         return str(obj.id)

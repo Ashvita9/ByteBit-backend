@@ -26,6 +26,11 @@ class CoderProfile(Document):
     )
     role       = fields.StringField(default="STUDENT", choices=["ADMIN", "TEACHER", "STUDENT"])
 
+    # Extended profile fields
+    age        = fields.IntField(default=0)
+    gender     = fields.StringField(default='')
+    friends    = fields.ListField(fields.StringField(), default=[])
+
     meta = {'collection': 'coder_profiles'}
 
     def __str__(self):
@@ -209,6 +214,18 @@ class UserNotification(Document):
     created_at = fields.DateTimeField(default=datetime.utcnow)
 
     meta = {'collection': 'user_notifications', 'ordering': ['-created_at']}
+
+# ── Friend Requests ────────────────────────────────────────────────────────────
+
+class FriendRequest(Document):
+    """A pending, accepted, or declined friend request between two users."""
+    from_user_id = fields.StringField(required=True)
+    from_username = fields.StringField(required=True)
+    to_user_id   = fields.StringField(required=True)
+    status       = fields.StringField(choices=['pending', 'accepted', 'declined'], default='pending')
+    created_at   = fields.DateTimeField(default=datetime.utcnow)
+
+    meta = {'collection': 'friend_requests', 'ordering': ['-created_at']}
 
 # ── Battle Rooms ───────────────────────────────────────────────────────────────
 

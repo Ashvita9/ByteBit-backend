@@ -14,7 +14,7 @@ from django.contrib.auth.models import User
 from .models import (
     CodingTask, CoderProfile, BattleRoom,
     Submission, Classroom, Announcement, Ticket, ActionLog,
-    GlobalAnnouncement, UserNotification
+    GlobalAnnouncement, UserNotification, FriendRequest
 )
 from .serializers import (
     CodingTaskSerializer,
@@ -160,16 +160,41 @@ class CustomLoginView(TokenObtainPairView):
 
 # â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-@api_view(['GET'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def my_profile(request):
     try:
         profile = CoderProfile.objects.get(user_id=str(request.user.id))
-        data = CoderProfileSerializer(profile).data
-        data['username'] = request.user.username
-        return Response(data)
     except CoderProfile.DoesNotExist:
         return Response({'error': 'Profile not found'}, status=404)
+
+    if request.method == 'GET':
+        data = CoderProfileSerializer(profile).data
+        data['username'] = request.user.username
+        data['email'] = request.user.email
+        data['date_joined'] = request.user.date_joined.isoformat()
+        return Response(data)
+
+    # PATCH — update editable profile fields
+    email = request.data.get('email')
+    if email is not None:
+        request.user.email = email.strip()
+        request.user.save()
+
+    if 'age' in request.data:
+        try:
+            profile.age = int(request.data['age'])
+        except (ValueError, TypeError):
+            pass
+    if 'gender' in request.data:
+        profile.gender = str(request.data['gender']).strip()
+    profile.save()
+
+    data = CoderProfileSerializer(profile).data
+    data['username'] = request.user.username
+    data['email'] = request.user.email
+    data['date_joined'] = request.user.date_joined.isoformat()
+    return Response(data)
 
 
 # â”€â”€ Classroom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1075,6 +1100,117 @@ def admin_user_action(request, user_id):
             u.save()
             _log('user_locked' if not u.is_active else 'user_unlocked', request.user, target_user=user_id, details=f'{u.username} {"locked" if not u.is_active else "unlocked"}.')
             return Response({'status': 'ok', 'is_active': u.is_active})
+
+
+
+
+# ── Friends ───────────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def friends_list(request):
+    """GET /api/friends/ - list current user's confirmed friends."""
+    try:
+        profile = CoderProfile.objects.get(user_id=str(request.user.id))
+    except CoderProfile.DoesNotExist:
+        return Response([])
+    result = []
+    for uid in (profile.friends or []):
+        try:
+            u = User.objects.get(id=uid)
+            result.append({'id': uid, 'username': u.username})
+        except User.DoesNotExist:
+            pass
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def friend_requests_list(request):
+    """GET /api/friends/requests/ - list pending incoming friend requests."""
+    reqs = FriendRequest.objects.filter(to_user_id=str(request.user.id), status='pending')
+    return Response([{
+        'id': str(r.id),
+        'from_user_id': r.from_user_id,
+        'from_username': r.from_username,
+        'status': r.status,
+        'created_at': r.created_at.isoformat(),
+    } for r in reqs])
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def send_friend_request(request):
+    """POST /api/friends/request/ - send a friend request by username."""
+    target_username = request.data.get('username', '').strip()
+    if not target_username:
+        return Response({'error': 'username is required'}, status=400)
+
+    try:
+        target_user = User.objects.get(username=target_username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found.'}, status=404)
+
+    from_id = str(request.user.id)
+    to_id = str(target_user.id)
+
+    if from_id == to_id:
+        return Response({'error': 'Cannot send a friend request to yourself.'}, status=400)
+
+    try:
+        my_prof = CoderProfile.objects.get(user_id=from_id)
+        if to_id in (my_prof.friends or []):
+            return Response({'error': 'You are already friends with this user.'}, status=400)
+    except CoderProfile.DoesNotExist:
+        pass
+
+    existing = FriendRequest.objects.filter(from_user_id=from_id, to_user_id=to_id, status='pending').first()
+    if existing:
+        return Response({'error': 'Friend request already sent.'}, status=400)
+
+    FriendRequest(
+        from_user_id=from_id,
+        from_username=request.user.username,
+        to_user_id=to_id,
+    ).save()
+    return Response({'message': 'Friend request sent.'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def accept_friend_request(request, req_id):
+    """POST /api/friends/requests/<req_id>/accept/"""
+    try:
+        freq = FriendRequest.objects.get(id=req_id, to_user_id=str(request.user.id), status='pending')
+    except FriendRequest.DoesNotExist:
+        return Response({'error': 'Friend request not found.'}, status=404)
+
+    freq.status = 'accepted'
+    freq.save()
+
+    for uid_a, uid_b in [(freq.to_user_id, freq.from_user_id), (freq.from_user_id, freq.to_user_id)]:
+        try:
+            p = CoderProfile.objects.get(user_id=uid_a)
+            if uid_b not in (p.friends or []):
+                p.friends = list(p.friends or []) + [uid_b]
+                p.save()
+        except CoderProfile.DoesNotExist:
+            pass
+    return Response({'message': 'Friend request accepted.'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def decline_friend_request(request, req_id):
+    """POST /api/friends/requests/<req_id>/decline/"""
+    try:
+        freq = FriendRequest.objects.get(id=req_id, to_user_id=str(request.user.id), status='pending')
+    except FriendRequest.DoesNotExist:
+        return Response({'error': 'Friend request not found.'}, status=404)
+
+    freq.status = 'declined'
+    freq.save()
+    return Response({'message': 'Friend request declined.'})
 
 
 # ── ADMIN: Classrooms ────────────────────────────────────────────────────────
