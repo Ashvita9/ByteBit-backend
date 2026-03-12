@@ -22,6 +22,7 @@ class SubmissionSerializer(serializers.Serializer):
     remarks        = serializers.CharField(default='', allow_blank=True)
     is_active      = serializers.BooleanField(default=True)
     status         = serializers.ChoiceField(choices=['Submitted', 'Unsubmitted'], default='Submitted')
+    review_status  = serializers.ChoiceField(choices=['pending', 'graded'], default='graded')
     last_edited_at = serializers.DateTimeField(read_only=True)
     created_at     = serializers.DateTimeField(read_only=True)
 
@@ -42,6 +43,7 @@ class CodingTaskSerializer(serializers.Serializer):
     linked_lab    = serializers.IntegerField(default=0)
     hints         = serializers.ListField(child=serializers.CharField(), default=[])
     grading_mode  = serializers.ChoiceField(choices=["Percentage", "Marks", "Grade"], default="Percentage")
+    grading_type  = serializers.ChoiceField(choices=["auto", "manual"], default="auto")
     max_marks     = serializers.FloatField(default=100.0)
     pass_criteria = serializers.FloatField(default=50.0)
     created_at    = serializers.DateTimeField(read_only=True)

@@ -64,6 +64,8 @@ class Submission(EmbeddedDocument):
     marks_obtained = fields.FloatField(default=0.0)
     grade          = fields.StringField(default='')
     remarks      = fields.StringField(default='')
+    # Manual grading review status
+    review_status = fields.StringField(choices=['pending', 'graded'], default='graded')
     # Versioning
     is_active    = fields.BooleanField(default=True)
     status       = fields.StringField(default='Submitted', choices=['Submitted', 'Unsubmitted'])
@@ -89,6 +91,7 @@ class CodingTask(Document):
     hints         = fields.ListField(fields.StringField(), default=[])
     # Grading configuration set by teacher
     grading_mode  = fields.StringField(choices=["Percentage", "Marks", "Grade"], default="Percentage")
+    grading_type  = fields.StringField(choices=["auto", "manual"], default="auto")  # auto=test cases, manual=teacher assigns marks
     max_marks     = fields.FloatField(default=100.0)
     pass_criteria = fields.FloatField(default=50.0)   # % or marks needed to pass
     created_at    = fields.DateTimeField(default=datetime.utcnow)
@@ -190,6 +193,21 @@ class ActionLog(Document):
 
     meta = {'collection': 'action_logs', 'ordering': ['-created_at']}
 
+# ── User Notifications ────────────────────────────────────────────────────────────
+
+class UserNotification(Document):
+    """Per-user notification sent when a manual submission is under review or graded."""
+    user_id    = fields.StringField(required=True)
+    username   = fields.StringField(default='')
+    title      = fields.StringField(required=True)
+    message    = fields.StringField(required=True)
+    notif_type = fields.StringField(choices=["review", "graded", "general"], default="general")
+    is_read    = fields.BooleanField(default=False)
+    task_id    = fields.StringField(default='')
+    task_title = fields.StringField(default='')
+    created_at = fields.DateTimeField(default=datetime.utcnow)
+
+    meta = {'collection': 'user_notifications', 'ordering': ['-created_at']}
 
 # ── Battle Rooms ───────────────────────────────────────────────────────────────
 

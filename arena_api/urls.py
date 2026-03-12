@@ -60,4 +60,11 @@ urlpatterns = [
     # Teacher raises ticket
     path('tickets/raise/',                        views.raise_ticket,           name='raise-ticket'),
     path('tickets/<str:ticket_id>/',              views.teacher_delete_ticket,  name='teacher-delete-ticket'),
+
+    # Manual grading
+    path('tasks/<str:task_id>/grade/',            views.grade_submission,        name='grade-submission'),
+
+    # Per-user notifications (grading review, marks assigned)
+    path('user-notifications/',                   views.user_notifications,          name='user-notifications'),
+    path('user-notifications/<str:notif_id>/read/', views.mark_notification_read,   name='mark-notification-read'),
 ]

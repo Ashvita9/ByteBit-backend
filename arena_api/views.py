@@ -14,7 +14,7 @@ from django.contrib.auth.models import User
 from .models import (
     CodingTask, CoderProfile, BattleRoom,
     Submission, Classroom, Announcement, Ticket, ActionLog,
-    GlobalAnnouncement
+    GlobalAnnouncement, UserNotification
 )
 from .serializers import (
     CodingTaskSerializer,
@@ -622,12 +622,22 @@ def record_submission(request, task_id):
 
     # â”€â”€ Grading config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     grading_mode  = getattr(task, 'grading_mode', 'Percentage') or 'Percentage'
+    grading_type  = getattr(task, 'grading_type', 'auto') or 'auto'
     max_marks     = float(getattr(task, 'max_marks', 100) or 100)
-    marks_obtained = round(score / 100 * max_marks, 1)
-    grade          = task.compute_grade(score) if hasattr(task, 'compute_grade') else ''
-    is_final = getattr(task, 'is_final', False)
-    passed = True if is_final else all_passed
-    remarks = f'Final assessment submitted. Score: {score}%' if is_final else ('All test cases passed.' if all_passed else f'{n_passed}/{total} test cases passed.')
+    is_final      = getattr(task, 'is_final', False)
+
+    if grading_type == 'manual':
+        marks_obtained = 0.0
+        grade          = ''
+        passed         = False
+        review_status  = 'pending'
+        remarks        = 'Submitted for teacher review. Marks will be assigned by your teacher.'
+    else:
+        marks_obtained = round(score / 100 * max_marks, 1)
+        grade          = task.compute_grade(score) if hasattr(task, 'compute_grade') else ''
+        passed         = True if is_final else all_passed
+        review_status  = 'graded'
+        remarks        = f'Final assessment submitted. Score: {score}%' if is_final else ('All test cases passed.' if all_passed else f'{n_passed}/{total} test cases passed.')
 
     now = datetime.utcnow()
 
@@ -651,6 +661,7 @@ def record_submission(request, task_id):
         marks_obtained = marks_obtained,
         grade          = grade,
         remarks        = remarks,
+        review_status  = review_status,
         is_active      = True,
         status         = 'Submitted',
         last_edited_at = now,
@@ -658,6 +669,21 @@ def record_submission(request, task_id):
     )
     task.submissions.append(new_sub)
     task.save()
+
+    # ── Notify student if manual grading ────────────────────────────────────
+    if grading_type == 'manual':
+        try:
+            UserNotification(
+                user_id    = user_id,
+                username   = username,
+                title      = 'Submission Under Review',
+                message    = f'Your submission for "{task.title}" has been received and is being reviewed by your teacher. You will be notified once marks are assigned.',
+                notif_type = 'review',
+                task_id    = str(task.id),
+                task_title = task.title,
+            ).save()
+        except Exception:
+            pass
 
     # â”€â”€ Award XP to STUDENT profiles only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     xp_earned = 0
@@ -731,6 +757,121 @@ def unsubmit(request, task_id):
         task.save()
         return Response({'status': 'unsubmitted'})
     return Response({'error': 'No active submission found'}, status=404)
+
+
+# -- Grade Submission (teacher manually assigns marks) -----------------------
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def grade_submission(request, task_id):
+    """POST /api/tasks/<id>/grade/ — teacher assigns marks for a manual-graded submission."""
+    try:
+        task = CodingTask.objects.get(id=task_id)
+    except Exception:
+        return Response({'error': 'Task not found'}, status=404)
+
+    target_user_id = request.data.get('user_id', '')
+    try:
+        marks_obtained = float(request.data.get('marks_obtained', 0))
+    except (ValueError, TypeError):
+        return Response({'error': 'Invalid marks value'}, status=400)
+    remarks       = str(request.data.get('remarks', '')).strip()
+    max_marks     = float(getattr(task, 'max_marks', 100) or 100)
+    pass_criteria = float(getattr(task, 'pass_criteria', 50) or 50)
+
+    # Clamp to valid range
+    marks_obtained = max(0.0, min(marks_obtained, max_marks))
+
+    updated         = False
+    target_username = ''
+    for s in (task.submissions or []):
+        if s.user_id == target_user_id and getattr(s, 'is_active', True):
+            pct              = (marks_obtained / max_marks * 100) if max_marks > 0 else 0
+            s.marks_obtained = marks_obtained
+            s.score          = round(pct, 1)
+            s.grade          = task.compute_grade(pct) if hasattr(task, 'compute_grade') else ''
+            s.passed         = marks_obtained >= pass_criteria
+            s.remarks        = remarks or f'Marks assigned by teacher: {marks_obtained}/{max_marks}'
+            s.review_status  = 'graded'
+            s.last_edited_at = datetime.utcnow()
+            target_username  = s.username
+            updated          = True
+            break
+
+    if not updated:
+        return Response({'error': 'No active submission found for this student'}, status=404)
+
+    task.save()
+
+    # Notify the student
+    try:
+        passed_str = 'Passed' if marks_obtained >= pass_criteria else 'Did not pass'
+        msg = (
+            f'Your teacher graded your submission for "{task.title}". '
+            f'You received {marks_obtained}/{max_marks} marks. {passed_str}.'
+        )
+        if remarks:
+            msg += f' Remark: {remarks}'
+        UserNotification(
+            user_id    = target_user_id,
+            username   = target_username,
+            title      = 'Marks Assigned',
+            message    = msg,
+            notif_type = 'graded',
+            task_id    = str(task.id),
+            task_title = task.title,
+        ).save()
+    except Exception:
+        pass
+
+    return Response({
+        'status':          'graded',
+        'marks_obtained':  marks_obtained,
+        'max_marks':       max_marks,
+        'passed':          marks_obtained >= pass_criteria,
+    })
+
+
+# -- User Notifications -------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def user_notifications(request):
+    """GET /api/user-notifications/ — returns this user's notifications (newest first)."""
+    user_id = str(request.user.id)
+    try:
+        notifs = UserNotification.objects.filter(user_id=user_id).order_by('-created_at')[:50]
+        return Response([
+            {
+                'id':         str(n.id),
+                'title':      n.title,
+                'message':    n.message,
+                'notif_type': n.notif_type,
+                'is_read':    n.is_read,
+                'task_id':    n.task_id,
+                'task_title': n.task_title,
+                'created_at': n.created_at.isoformat() if n.created_at else None,
+            }
+            for n in notifs
+        ])
+    except Exception:
+        return Response([], status=200)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def mark_notification_read(request, notif_id):
+    """POST /api/user-notifications/<id>/read/ — mark one notification as read."""
+    user_id = str(request.user.id)
+    try:
+        n = UserNotification.objects.get(id=notif_id, user_id=user_id)
+        n.is_read = True
+        n.save()
+        return Response({'status': 'read'})
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+
+
 
 
 # ── Helper: log an action ────────────────────────────────────────────────────
