@@ -126,8 +126,9 @@ class Classroom(Document):
     teacher_id  = fields.StringField(required=True)
     student_ids = fields.ListField(fields.StringField(), default=[])
     task_ids    = fields.ListField(fields.StringField(), default=[])
-    is_locked   = fields.BooleanField(default=False)
-    announcements = fields.ListField(fields.EmbeddedDocumentField(Announcement), default=[])
+    is_locked       = fields.BooleanField(default=False)
+    sequential_labs = fields.BooleanField(default=False)
+    announcements   = fields.ListField(fields.EmbeddedDocumentField(Announcement), default=[])
     created_at  = fields.DateTimeField(default=datetime.utcnow)
 
     meta = {'collection': 'classrooms', 'ordering': ['-created_at']}

@@ -186,6 +186,7 @@ def _classroom_data(c, include_students=False):
         'student_ids': list(c.student_ids),   # â† exposed so frontend can diff enrolled vs public
         'task_ids': c.task_ids,
         'is_locked': c.is_locked,
+        'sequential_labs': getattr(c, 'sequential_labs', False),
         'created_at': c.created_at.isoformat() if c.created_at else None,
     }
     if include_students:
@@ -219,7 +220,8 @@ def classrooms(request):
         return Response({'error': 'name is required'}, status=400)
 
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    c = Classroom(name=name, type=ctype, teacher_id=str(request.user.id), code=code)
+    seq = bool(request.data.get('sequential_labs', False))
+    c = Classroom(name=name, type=ctype, teacher_id=str(request.user.id), code=code, sequential_labs=seq)
     c.save()
     return Response(_classroom_data(c), status=201)
 
@@ -273,6 +275,8 @@ def classroom_detail(request, classroom_id):
             c.type = request.data['type']
         if 'is_locked' in request.data:
             c.is_locked = request.data['is_locked']
+        if 'sequential_labs' in request.data:
+            c.sequential_labs = bool(request.data['sequential_labs'])
         c.save()
         return Response(_classroom_data(c))
 
@@ -619,6 +623,12 @@ def record_submission(request, task_id):
     total      = max(len(run_results), 1)
     n_passed   = sum(1 for r in run_results if r.get('passed', False))
     score      = round(n_passed / total * 100, 1)   # percentage
+
+    # Apply late submission penalty: -0.5 per day late, floor at 0
+    late_days = float(request.data.get('late_days', 0) or 0)
+    if late_days > 0:
+        penalty = late_days * 0.5
+        score   = max(0.0, round(score - penalty, 1))
 
     # â”€â”€ Grading config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     grading_mode  = getattr(task, 'grading_mode', 'Percentage') or 'Percentage'
