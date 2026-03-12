@@ -1551,6 +1551,13 @@ def _tournament_data(t):
         'winnerId':            t.winner_id,
         'winnerUsername':      t.winner_username,
         'maxPlayers':          t.max_players,
+        'description':         t.description or '',
+        'startTime':           t.start_time.isoformat() if t.start_time else None,
+        'matchDuration':       t.match_duration,
+        'xpFirst':             t.xp_first,
+        'xpSecond':            t.xp_second,
+        'xpThird':             t.xp_third,
+        'isLocked':            t.is_locked,
         'createdAt':           t.created_at.isoformat(),
     }
 
@@ -1598,8 +1605,24 @@ def _generate_round(participant_ids, participant_usernames, round_num, questions
 @permission_classes([IsTeacher])
 def create_tournament(request):
     """POST /api/tournaments/ — teacher creates a new tournament."""
-    name        = request.data.get('name', '').strip()
-    max_players = int(request.data.get('maxPlayers', 10))
+    name           = request.data.get('name', '').strip()
+    max_players    = int(request.data.get('maxPlayers', 10))
+    description    = request.data.get('description', '').strip()
+    match_duration = int(request.data.get('matchDuration', 30))
+    xp_first       = int(request.data.get('xpFirst', 1000))
+    xp_second      = int(request.data.get('xpSecond', 600))
+    xp_third       = int(request.data.get('xpThird', 300))
+
+    # Optional ISO start_time
+    start_time_str = request.data.get('startTime', None)
+    start_time = None
+    if start_time_str:
+        try:
+            from datetime import datetime as dt
+            start_time = dt.fromisoformat(start_time_str.replace('Z', '+00:00'))
+        except ValueError:
+            return Response({'error': 'Invalid startTime format; use ISO 8601'}, status=400)
+
     if not name:
         return Response({'error': 'name required'}, status=400)
 
@@ -1610,6 +1633,12 @@ def create_tournament(request):
         teacher_id=str(request.user.id),
         teacher_username=request.user.username,
         max_players=max(2, min(max_players, 32)),
+        description=description,
+        start_time=start_time,
+        match_duration=max(5, min(match_duration, 180)),
+        xp_first=max(0, xp_first),
+        xp_second=max(0, xp_second),
+        xp_third=max(0, xp_third),
     )
     t.save()
     return Response(_tournament_data(t), status=201)
@@ -1722,6 +1751,9 @@ def join_tournament(request):
     if t.status != 'waiting':
         return Response({'error': 'Tournament has already started'}, status=400)
 
+    if t.is_locked:
+        return Response({'error': 'Participant list is locked'}, status=400)
+
     uid = str(request.user.id)
     if uid in t.participant_ids:
         return Response(_tournament_data(t))  # already joined
@@ -1796,6 +1828,49 @@ def advance_tournament(request, tournament_id):
         t.winner_id = winners[0]
         t.winner_username = dict(t.participant_usernames).get(winners[0], '')
         t.save()
+
+        # Award XP to top 3 finishers
+        try:
+            # 1st: champion
+            first_id = winners[0]
+
+            # 2nd: whoever lost the final match (same round, the other player)
+            final_match = next(
+                (m for m in current_matches if m.winner_id == first_id and m.status == 'done'),
+                None
+            )
+            second_id = None
+            if final_match:
+                second_id = final_match.player2_id if final_match.player1_id == first_id else final_match.player1_id
+
+            # 3rd: losers from the semi-final round (round before current)
+            third_ids = []
+            if t.current_round > 1:
+                semi_matches = [m for m in t.matches if m.round_num == t.current_round - 1]
+                third_ids = [
+                    (m.player2_id if m.winner_id == m.player1_id else m.player1_id)
+                    for m in semi_matches
+                    if m.status == 'done' and m.winner_id
+                ]
+
+            def _award_xp(uid, amount):
+                if not uid or not amount:
+                    return
+                try:
+                    profile = CoderProfile.objects.get(user_id=uid)
+                    profile.xp = (profile.xp or 0) + amount
+                    profile.update_rank()
+                    profile.save()
+                except Exception:
+                    pass
+
+            _award_xp(first_id, t.xp_first)
+            _award_xp(second_id, t.xp_second)
+            for tid in third_ids:
+                _award_xp(tid, t.xp_third)
+        except Exception:
+            pass  # XP errors must never block the tournament result
+
         return Response(_tournament_data(t))
 
     next_round = t.current_round + 1
@@ -1840,5 +1915,23 @@ def decide_match_winner(request, tournament_id, match_id):
     if not updated:
         return Response({'error': 'Match not found'}, status=404)
 
+    t.save()
+    return Response(_tournament_data(t))
+
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def lock_tournament(request, tournament_id):
+    """POST /api/tournaments/<id>/lock/ — toggle participant lock."""
+    try:
+        t = Tournament.objects.get(id=tournament_id)
+    except Exception:
+        return Response({'error': 'Not found'}, status=404)
+    if t.teacher_id != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+    if t.status != 'waiting':
+        return Response({'error': 'Can only lock a waiting tournament'}, status=400)
+
+    t.is_locked = not t.is_locked
     t.save()
     return Response(_tournament_data(t))

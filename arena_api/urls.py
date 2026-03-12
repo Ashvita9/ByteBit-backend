@@ -85,5 +85,6 @@ urlpatterns = [
     path('tournaments/<str:tournament_id>/questions/<int:q_idx>/',            views.remove_tournament_question, name='tournament-remove-question'),
     path('tournaments/<str:tournament_id>/start/',                            views.start_tournament,          name='tournament-start'),
     path('tournaments/<str:tournament_id>/advance/',                          views.advance_tournament,        name='tournament-advance'),
+    path('tournaments/<str:tournament_id>/lock/',                             views.lock_tournament,           name='tournament-lock'),
     path('tournaments/<str:tournament_id>/matches/<str:match_id>/decide/',    views.decide_match_winner,       name='tournament-decide'),
 ]

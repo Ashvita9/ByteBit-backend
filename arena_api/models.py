@@ -291,6 +291,13 @@ class Tournament(Document):
     winner_id            = fields.StringField(default='')
     winner_username      = fields.StringField(default='')
     max_players          = fields.IntField(default=10)
+    description          = fields.StringField(default='')
+    start_time           = fields.DateTimeField(null=True)
+    match_duration       = fields.IntField(default=30)   # minutes per match
+    xp_first             = fields.IntField(default=1000)
+    xp_second            = fields.IntField(default=600)
+    xp_third             = fields.IntField(default=300)
+    is_locked            = fields.BooleanField(default=False)
     created_at           = fields.DateTimeField(default=datetime.utcnow)
 
     meta = {'collection': 'tournaments', 'ordering': ['-created_at']}
