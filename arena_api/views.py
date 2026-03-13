@@ -1,5 +1,6 @@
 import random
 import string
+import os
 from datetime import datetime, timedelta
 
 from django.shortcuts import get_object_or_404
@@ -879,6 +880,50 @@ def record_submission(request, task_id):
     except Exception:
         pass
 
+    # ── Gemini AI feedback (only when test cases fail) ─────────────────────────
+    ai_feedback = None
+    if not all_passed and grading_type == 'auto':
+        try:
+            gemini_key = os.environ.get('GEMINI_API_KEY', '')
+            if gemini_key:
+                import urllib.request, json as _json
+                tc_summary = '\n'.join(
+                    f'TC{j+1}: input={tc.input_data!r}, expected={tc.output_data!r}, '
+                    f'got={run_results[j].get("actual_output", "?") if j < len(run_results) else "?"}'
+                    f' [{"PASS" if (j < len(run_results) and run_results[j].get("passed")) else "FAIL"}]'
+                    for j, tc in enumerate(task.test_cases or [])
+                )
+                prompt = (
+                    f'A student submitted the following {language} code for the problem "{task.title}".\n'
+                    f'Problem description: {task.description}\n\n'
+                    f'Student\'s code:\n```\n{code[:3000]}\n```\n\n'
+                    f'Test case results ({n_passed}/{total} passed):\n{tc_summary}\n\n'
+                    f'Give a very short, encouraging hint (2-3 sentences max) pointing out '
+                    f'what is wrong and what the student should look into to fix it. '
+                    f'Do NOT give away the full solution. Be specific but concise.'
+                )
+                payload = _json.dumps({
+                    'contents': [{'parts': [{'text': prompt}]}],
+                    'generationConfig': {'temperature': 0.5, 'maxOutputTokens': 200},
+                }).encode()
+                gemini_url = (
+                    'https://generativelanguage.googleapis.com/v1beta/models/'
+                    f'gemini-2.0-flash:generateContent?key={gemini_key}'
+                )
+                req = urllib.request.Request(
+                    gemini_url, data=payload,
+                    headers={'Content-Type': 'application/json'}, method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    rdata = _json.loads(resp.read())
+                ai_feedback = (
+                    rdata.get('candidates', [{}])[0]
+                    .get('content', {}).get('parts', [{}])[0]
+                    .get('text', '').strip()
+                ) or None
+        except Exception:
+            pass  # Gemini feedback is best-effort only
+
     return Response({
         'status': 'recorded',
         'score': score,
@@ -889,6 +934,7 @@ def record_submission(request, task_id):
         'remarks': remarks,
         'passed': all_passed,
         'xp_earned': xp_earned,
+        'ai_feedback': ai_feedback,
     })
 
 # â”€â”€ Unsubmit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
