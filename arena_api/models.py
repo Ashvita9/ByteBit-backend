@@ -102,6 +102,7 @@ class CodingTask(Document):
     # Grading configuration set by teacher
     grading_mode  = fields.StringField(choices=["Percentage", "Marks", "Grade"], default="Percentage")
     grading_type  = fields.StringField(choices=["auto", "manual"], default="auto")  # auto=test cases, manual=teacher assigns marks
+    allow_tab_completion = fields.BooleanField(default=True)
     max_marks     = fields.FloatField(default=100.0)
     pass_criteria = fields.FloatField(default=50.0)   # % or marks needed to pass
     created_at    = fields.DateTimeField(default=datetime.utcnow)

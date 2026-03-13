@@ -44,6 +44,7 @@ class CodingTaskSerializer(serializers.Serializer):
     hints         = serializers.ListField(child=serializers.CharField(), default=[])
     grading_mode  = serializers.ChoiceField(choices=["Percentage", "Marks", "Grade"], default="Percentage")
     grading_type  = serializers.ChoiceField(choices=["auto", "manual"], default="auto")
+    allow_tab_completion = serializers.BooleanField(default=True)
     max_marks     = serializers.FloatField(default=100.0)
     pass_criteria = serializers.FloatField(default=50.0)
     created_at    = serializers.DateTimeField(read_only=True)
