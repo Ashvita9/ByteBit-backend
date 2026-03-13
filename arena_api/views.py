@@ -160,6 +160,39 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        
+        refresh = RefreshToken(attrs['refresh'])
+        user_id = refresh.payload.get('user_id')
+        
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id)
+                data['username'] = user.username
+                data['user_id'] = str(user.id)
+                
+                if user.is_superuser:
+                    data['role'] = 'ADMIN'
+                else:
+                    try:
+                        profile = CoderProfile.objects.get(user_id=str(user.id))
+                        data['role'] = profile.role
+                    except CoderProfile.DoesNotExist:
+                        data['role'] = 'STUDENT'
+            except User.DoesNotExist:
+                pass
+                
+        return data
+
+class CustomTokenRefreshView(TokenRefreshView):
+    serializer_class = CustomTokenRefreshSerializer
+
 
 # â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
