@@ -19,6 +19,7 @@ urlpatterns = [
 
     # Profile
     path('me/',                    views.my_profile,                       name='my-profile'),
+    path('leaderboard/',           views.get_leaderboard,                  name='leaderboard'),
 
     # Friends
     path('friends/',                                        views.friends_list,            name='friends-list'),
