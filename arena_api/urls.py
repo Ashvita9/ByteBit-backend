@@ -73,6 +73,7 @@ urlpatterns = [
 
     # Per-user notifications (grading review, marks assigned)
     path('user-notifications/',                   views.user_notifications,          name='user-notifications'),
+    path('user-notifications/clear_all/',         views.clear_all_notifications,    name='clear-all-notifications'),
     path('user-notifications/<str:notif_id>/read/', views.mark_notification_read,   name='mark-notification-read'),
 
     # Tournaments

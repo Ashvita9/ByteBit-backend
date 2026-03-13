@@ -950,6 +950,8 @@ def user_notifications(request):
                 'is_read':    n.is_read,
                 'task_id':    n.task_id,
                 'task_title': n.task_title,
+                'extra_id':   n.extra_id,
+                'extra_name': n.extra_name,
                 'created_at': n.created_at.isoformat() if n.created_at else None,
             }
             for n in notifs
@@ -970,6 +972,15 @@ def mark_notification_read(request, notif_id):
         return Response({'status': 'read'})
     except Exception:
         return Response({'error': 'Not found'}, status=404)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def clear_all_notifications(request):
+    """POST /api/user-notifications/clear_all/ — deletes all notifications for this user."""
+    user_id = str(request.user.id)
+    UserNotification.objects.filter(user_id=user_id).delete()
+    return Response({'status': 'cleared'})
 
 
 
@@ -1573,9 +1584,11 @@ def request_reattempt(request):
             user_id=teacher_id,
             title="Reattempt Request",
             message=f"{request.user.username} requested a reattempt for '{task.title}'",
-            notif_type="general",
+            notif_type="reattempt_request",
             task_id=str(task.id),
-            task_title=task.title
+            task_title=task.title,
+            extra_id=str(req.id),
+            extra_name=request.user.username
         )
     except Exception as e:
         print("Notification error:", e)
