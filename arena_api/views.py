@@ -1269,16 +1269,16 @@ def accept_friend_request(request, req_id):
     freq.save()
 
     try:
-        UserNotification.objects.create(
+        UserNotification(
             user_id=freq.from_user_id,
             title="Friend Request Accepted",
             message=f"{request.user.username} accepted your friend request!",
             notif_type="general",
             extra_id=str(request.user.id),
             extra_name=request.user.username
-        )
-    except:
-        pass
+        ).save()
+    except Exception as e:
+        print("friend accept notification err:", e)
 
     for uid_a, uid_b in [(freq.to_user_id, freq.from_user_id), (freq.from_user_id, freq.to_user_id)]:
         try:
@@ -1582,14 +1582,14 @@ def request_reattempt(request):
              
              try:
                  classroom = Classroom.objects.get(id=task.classroom_id)
-                 UserNotification.objects.create(
+                 UserNotification(
                      user_id=classroom.teacher_id,
                      title="Reattempt Request (Re-opened)",
                      message=f"{request.user.username} re-requested a reattempt for '{task.title}'",
                      notif_type="general",
                      task_id=str(task.id),
                      task_title=task.title
-                 )
+                 ).save()
              except Exception as e:
                  print("Notification error:", e)
                  
@@ -1614,7 +1614,7 @@ def request_reattempt(request):
     req.save()
     
     try:
-        UserNotification.objects.create(
+        UserNotification(
             user_id=teacher_id,
             title="Reattempt Request",
             message=f"{request.user.username} requested a reattempt for '{task.title}'",
@@ -1623,7 +1623,7 @@ def request_reattempt(request):
             task_title=task.title,
             extra_id=str(req.id),
             extra_name=request.user.username
-        )
+        ).save()
     except Exception as e:
         print("Notification error:", e)
         

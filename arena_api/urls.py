@@ -13,8 +13,9 @@ urlpatterns = [
     path('health/',                health_check,                           name='health-check'),
 
     # Auth
-    path('auth/register/',         views.UserRegistrationView.as_view(),  name='register'),
+    path('auth/register/',         views.UserRegistrationView.as_view(),   name='register'),
     path('auth/login/',            views.CustomLoginView.as_view(),        name='login'),
+    path('auth/refresh/',          views.CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('auth/teacher/create/',   views.create_teacher,                   name='create-teacher'),
 
     # Profile
