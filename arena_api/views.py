@@ -151,7 +151,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             data['losses'] = profile.losses
             data['rank']   = profile.rank
             data['badges'] = profile.badges
-        except Exception:
+        except CoderProfile.DoesNotExist:
             data['role'] = 'STUDENT'
         return data
 
