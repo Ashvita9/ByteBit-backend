@@ -293,15 +293,17 @@ def classroom_detail(request, classroom_id):
                         # Actually, dashboard logic filters by is_active, so let's send them.
                         my_subs.append({
                             'user_id':        str(s.user_id),
-                            'username':       getattr(s, 'username', 'Unknown'), 
+                            'username':       getattr(s, 'username', 'Unknown'),
                             'passed':         s.passed,
+                            'code':           getattr(s, 'code', ''),
+                            'language':       getattr(s, 'language', ''),
                             'score':          s.score,
                             'marks_obtained': s.marks_obtained,
                             'grade':          s.grade,
                             'remarks':        s.remarks,
                             'review_status':  getattr(s, 'review_status', 'graded'),
                             'is_active':      getattr(s, 'is_active', True),
-                            'submitted_at':   s.submitted_at.isoformat() if getattr(s, 'submitted_at', None) else None,
+                            'created_at':     s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
                         })
                 
                 # Check reattempt status for this user
@@ -327,11 +329,13 @@ def classroom_detail(request, classroom_id):
                     'tech_stack': t.tech_stack,
                     'task_type': t.task_type,
                     'grading_mode': getattr(t, 'grading_mode', 'Percentage'),
+                    'grading_type': getattr(t, 'grading_type', 'auto') or 'auto',
                     'max_marks': float(getattr(t, 'max_marks', 100) or 100),
+                    'pass_criteria': float(getattr(t, 'pass_criteria', 50) or 50),
                     'lab_number': getattr(t, 'lab_number', 0) or 0,
                     'linked_lab': getattr(t, 'linked_lab', 0) or 0,
                     'due_date': t.due_date.isoformat() if t.due_date else None,
-                    'submissions_count': len(t.submissions),
+                    'submissions_count': len(t.submissions or []),
                     'submissions': my_subs,
                     'reattempt': reattempt_data,
                     'is_extended': is_extended,
@@ -1556,7 +1560,7 @@ def request_reattempt(request):
 def get_reattempt_requests(request):
     """
     GET /api/reattempt-requests/
-    Returns requests for tasks where this user is the teacher.
+    Returns pending reattempt requests for tasks in this teacher's classrooms.
     """
     uid = str(request.user.id)
     reqs = ReattemptRequest.objects.filter(teacher_id=uid, status='pending')
@@ -1564,10 +1568,12 @@ def get_reattempt_requests(request):
     for r in reqs:
         data.append({
             'id': str(r.id),
+            'student_id': r.student_id,
             'student_name': r.student_name,
+            'task_id': r.task_id,
             'task_title': r.task_title,
+            'classroom_id': r.classroom_id,
             'created_at': r.created_at.isoformat(),
-            'classroom_id': r.classroom_id
         })
     return Response(data)
 
@@ -1580,24 +1586,45 @@ def approve_reattempt(request):
     """
     rid = request.data.get('request_id')
     action = request.data.get('action', 'approve')
-    
+
     try:
         req = ReattemptRequest.objects.get(id=rid)
-    except:
+    except Exception:
         return Response({'error': 'Request not found'}, status=404)
-        
+
     if req.teacher_id != str(request.user.id):
         return Response({'error': 'Forbidden'}, status=403)
-        
+
     if action == 'approve':
         req.status = 'approved'
-        req.expires_at = datetime.utcnow() + timedelta(days=1) # 24 hours extension
+        req.expires_at = datetime.utcnow() + timedelta(days=1)  # 24 hours extension
+        notif_title = 'Reattempt Approved'
+        notif_msg = (f'Your request to reattempt "{req.task_title}" has been approved! '
+                     f'You have 24 hours to reattempt the lab.')
     else:
         req.status = 'rejected'
         req.expires_at = None
-        
+        notif_title = 'Reattempt Rejected'
+        notif_msg = (f'Your request to reattempt "{req.task_title}" was not approved '
+                     f'by your teacher. You may submit another request later.')
+
     req.save()
-    return Response({'status': f'Request {action}d'})
+
+    # Notify the student
+    try:
+        UserNotification(
+            user_id    = req.student_id,
+            username   = req.student_name,
+            title      = notif_title,
+            message    = notif_msg,
+            notif_type = 'general',
+            task_id    = req.task_id,
+            task_title = req.task_title,
+        ).save()
+    except Exception:
+        pass
+
+    return Response({'status': f'Request {action}d', 'action': action})
 
 
 # ── Public Announcements (for students/teachers) ────────────────────────────
