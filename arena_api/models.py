@@ -116,6 +116,20 @@ class CodingTask(Document):
         return 'F'
 
 
+class ReattemptRequest(Document):
+    student_id   = fields.StringField(required=True)
+    student_name = fields.StringField(required=True) # Redundant but useful for displaying
+    task_id      = fields.StringField(required=True)
+    task_title   = fields.StringField(required=True)
+    classroom_id = fields.StringField(required=True)
+    teacher_id   = fields.StringField(required=True)
+    status       = fields.StringField(default='pending', choices=['pending', 'approved', 'rejected', 'expired'])
+    expires_at   = fields.DateTimeField() # When approved, set to +1 day
+    created_at   = fields.DateTimeField(default=datetime.utcnow)
+
+    meta = {'collection': 'reattempt_requests', 'ordering': ['-created_at']}
+
+
 # ── Classroom ──────────────────────────────────────────────────────────────────
 
 class Announcement(EmbeddedDocument):
