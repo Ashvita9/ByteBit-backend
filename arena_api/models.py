@@ -105,6 +105,7 @@ class CodingTask(Document):
     allow_tab_completion = fields.BooleanField(default=True)
     max_marks     = fields.FloatField(default=100.0)
     pass_criteria = fields.FloatField(default=50.0)   # % or marks needed to pass
+    allow_copy_paste = fields.BooleanField(default=True)
     created_at    = fields.DateTimeField(default=datetime.utcnow)
 
     meta = {'collection': 'coding_tasks', 'ordering': ['-created_at']}

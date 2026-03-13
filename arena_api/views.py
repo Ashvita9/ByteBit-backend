@@ -64,6 +64,28 @@ class CodingTaskViewSet(viewsets.ModelViewSet):
         self.check_object_permissions(self.request, obj)
         return obj
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+
+        # Check for approved reattempt for the current user
+        user_id = str(request.user.id)
+        task_id = str(instance.id)
+
+        active_reattempt = ReattemptRequest.objects.filter(
+            student_id=user_id,
+            task_id=task_id,
+            status='approved',
+            expires_at__gt=datetime.utcnow()
+        ).first()
+
+        data['is_reattempt_approved'] = active_reattempt is not None
+        if active_reattempt:
+            data['reattempt_expires_at'] = active_reattempt.expires_at.isoformat()
+
+        return Response(data)
+
     def get_queryset(self):
         qs = CodingTask.objects.all()
         difficulty = self.request.query_params.get('difficulty')

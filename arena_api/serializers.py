@@ -47,6 +47,7 @@ class CodingTaskSerializer(serializers.Serializer):
     allow_tab_completion = serializers.BooleanField(default=True)
     max_marks     = serializers.FloatField(default=100.0)
     pass_criteria = serializers.FloatField(default=50.0)
+    allow_copy_paste = serializers.BooleanField(default=True)
     created_at    = serializers.DateTimeField(read_only=True)
 
     def get_id(self, obj):
