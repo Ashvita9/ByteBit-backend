@@ -908,7 +908,7 @@ def record_submission(request, task_id):
                 }).encode()
                 gemini_url = (
                     'https://generativelanguage.googleapis.com/v1beta/models/'
-                    f'gemini-2.0-flash:generateContent?key={gemini_key}'
+                    f'gemini-2.5-flash:generateContent?key={gemini_key}'
                 )
                 req = urllib.request.Request(
                     gemini_url, data=payload,
