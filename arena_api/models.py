@@ -34,6 +34,7 @@ class CoderProfile(Document):
     # Streak fields
     streak             = fields.IntField(default=0)
     last_activity_date = fields.DateTimeField(null=True)
+    daily_activity     = fields.DictField(default={})  # { "YYYY-MM-DD": count }
 
     meta = {'collection': 'coder_profiles'}
 

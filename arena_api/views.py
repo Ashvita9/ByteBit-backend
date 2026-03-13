@@ -812,6 +812,13 @@ def record_submission(request, task_id):
                     prof.streak = 1
                 
                 prof.last_activity_date = datetime.utcnow()
+                
+                # Update daily activity
+                activity = prof.daily_activity or {}
+                date_str = now_date.strftime('%Y-%m-%d')
+                activity[date_str] = activity.get(date_str, 0) + 1
+                prof.daily_activity = activity
+                
                 prof.recalc_rank()
                 prof.save()
     except Exception:

@@ -83,6 +83,7 @@ class CoderProfileSerializer(serializers.Serializer):
     age     = serializers.IntegerField(default=0)
     gender  = serializers.CharField(default='')
     streak  = serializers.IntegerField(default=0)
+    daily_activity = serializers.DictField(default={}, read_only=True)
 
     def get_id(self, obj):
         return str(obj.id)
