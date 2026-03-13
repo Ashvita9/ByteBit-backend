@@ -2165,3 +2165,30 @@ def lock_tournament(request, tournament_id):
     t.is_locked = not t.is_locked
     t.save()
     return Response(_tournament_data(t))
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_leaderboard(request):
+    """GET /api/leaderboard/ — top students by XP."""
+    limit = int(request.query_params.get('limit', 100))
+    profiles = CoderProfile.objects.filter(role='STUDENT').order_by('-xp')[:limit]
+    
+    leaderboard = []
+    for i, p in enumerate(profiles):
+        try:
+            u = User.objects.get(id=p.user_id)
+            username = u.username
+        except User.DoesNotExist:
+            username = "???"
+            
+        leaderboard.append({
+            'rank': i + 1,
+            'user_id': p.user_id,
+            'username': username,
+            'xp': p.xp,
+            'level': p.level,
+            'rank_name': p.rank
+        })
+        
+    return Response(leaderboard)
