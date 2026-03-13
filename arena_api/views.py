@@ -1246,6 +1246,18 @@ def accept_friend_request(request, req_id):
     freq.status = 'accepted'
     freq.save()
 
+    try:
+        UserNotification.objects.create(
+            user_id=freq.from_user_id,
+            title="Friend Request Accepted",
+            message=f"{request.user.username} accepted your friend request!",
+            notif_type="general",
+            extra_id=str(request.user.id),
+            extra_name=request.user.username
+        )
+    except:
+        pass
+
     for uid_a, uid_b in [(freq.to_user_id, freq.from_user_id), (freq.from_user_id, freq.to_user_id)]:
         try:
             p = CoderProfile.objects.get(user_id=uid_a)
