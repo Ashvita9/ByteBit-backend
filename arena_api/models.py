@@ -229,6 +229,8 @@ class UserNotification(Document):
     is_read    = fields.BooleanField(default=False)
     task_id    = fields.StringField(default='')
     task_title = fields.StringField(default='')
+    extra_id   = fields.StringField(default='')
+    extra_name = fields.StringField(default='')
     created_at = fields.DateTimeField(default=datetime.utcnow)
 
     meta = {'collection': 'user_notifications', 'ordering': ['-created_at']}
