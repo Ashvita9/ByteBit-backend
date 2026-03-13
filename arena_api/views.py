@@ -1534,6 +1534,20 @@ def request_reattempt(request):
              existing.status = 'pending'
              existing.created_at = datetime.utcnow()
              existing.save()
+             
+             try:
+                 classroom = Classroom.objects.get(id=task.classroom_id)
+                 UserNotification.objects.create(
+                     user_id=classroom.teacher_id,
+                     title="Reattempt Request (Re-opened)",
+                     message=f"{request.user.username} re-requested a reattempt for '{task.title}'",
+                     notif_type="general",
+                     task_id=str(task.id),
+                     task_title=task.title
+                 )
+             except Exception as e:
+                 print("Notification error:", e)
+                 
              return Response({'status': 'Re-opened request'})
 
     # Get classroom to find teacher
@@ -1553,6 +1567,19 @@ def request_reattempt(request):
         status='pending'
     )
     req.save()
+    
+    try:
+        UserNotification.objects.create(
+            user_id=teacher_id,
+            title="Reattempt Request",
+            message=f"{request.user.username} requested a reattempt for '{task.title}'",
+            notif_type="general",
+            task_id=str(task.id),
+            task_title=task.title
+        )
+    except Exception as e:
+        print("Notification error:", e)
+        
     return Response({'status': 'Request submitted'})
 
 @api_view(['GET'])
