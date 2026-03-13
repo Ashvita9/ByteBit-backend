@@ -30,6 +30,10 @@ class CoderProfile(Document):
     age        = fields.IntField(default=0)
     gender     = fields.StringField(default='')
     friends    = fields.ListField(fields.StringField(), default=[])
+    
+    # Streak fields
+    streak             = fields.IntField(default=0)
+    last_activity_date = fields.DateTimeField(null=True)
 
     meta = {'collection': 'coder_profiles'}
 

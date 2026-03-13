@@ -151,6 +151,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             data['losses'] = profile.losses
             data['rank']   = profile.rank
             data['badges'] = profile.badges
+            data['streak'] = getattr(profile, 'streak', 0)
         except CoderProfile.DoesNotExist:
             data['role'] = 'STUDENT'
         return data
@@ -794,9 +795,23 @@ def record_submission(request, task_id):
                 getattr(s, 'passed', False) and not getattr(s, 'is_active', True)
                 for s in task.submissions[:-1]
             )
-            if not already_passed:
+            if not already_passed and passed:
                 xp_earned = int(score)
                 prof.xp += xp_earned
+                
+                # Streak logic
+                now_date = datetime.utcnow().date()
+                if prof.last_activity_date:
+                    last_date = prof.last_activity_date.date()
+                    if last_date == now_date - timedelta(days=1):
+                        prof.streak += 1
+                    elif last_date < now_date - timedelta(days=1):
+                        prof.streak = 1
+                    # If last_date == now_date, streak stays the same
+                else:
+                    prof.streak = 1
+                
+                prof.last_activity_date = datetime.utcnow()
                 prof.recalc_rank()
                 prof.save()
     except Exception:
