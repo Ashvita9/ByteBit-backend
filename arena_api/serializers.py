@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import CodingTask, CoderProfile, TestCase, Submission, TECH_STACKS
+from .models import CodingTask, Classroom, CoderProfile, TestCase, Submission, TECH_STACKS
 
 
 class TestCaseSerializer(serializers.Serializer):
@@ -49,6 +49,22 @@ class CodingTaskSerializer(serializers.Serializer):
     pass_criteria = serializers.FloatField(default=50.0)
     allow_copy_paste = serializers.BooleanField(default=True)
     created_at    = serializers.DateTimeField(read_only=True)
+    classroom_name = serializers.SerializerMethodField()
+    classroom_type = serializers.SerializerMethodField()
+
+    def get_classroom_name(self, obj):
+        if not obj.classroom_id: return ''
+        try:
+            c = Classroom.objects.get(id=obj.classroom_id)
+            return c.name
+        except: return ''
+
+    def get_classroom_type(self, obj):
+        if not obj.classroom_id: return 'Public'
+        try:
+            c = Classroom.objects.get(id=obj.classroom_id)
+            return c.type
+        except: return 'Public'
 
     def get_id(self, obj):
         return str(obj.id)
