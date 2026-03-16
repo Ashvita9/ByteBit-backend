@@ -27,6 +27,8 @@ class CoderProfile(Document):
     role       = fields.StringField(default="STUDENT", choices=["ADMIN", "TEACHER", "STUDENT"])
 
     # Extended profile fields
+    full_name  = fields.StringField(default='')
+    reg_no     = fields.StringField(default='')
     age        = fields.IntField(default=0)
     gender     = fields.StringField(default='')
     friends    = fields.ListField(fields.StringField(), default=[])

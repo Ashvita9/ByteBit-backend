@@ -248,6 +248,10 @@ def my_profile(request):
             pass
     if 'gender' in request.data:
         profile.gender = str(request.data['gender']).strip()
+    if 'full_name' in request.data:
+        profile.full_name = str(request.data['full_name']).strip()
+    if 'reg_no' in request.data:
+        profile.reg_no = str(request.data['reg_no']).strip()
     profile.save()
 
     data = CoderProfileSerializer(profile).data

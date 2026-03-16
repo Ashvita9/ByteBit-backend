@@ -98,6 +98,8 @@ class CoderProfileSerializer(serializers.Serializer):
     badges  = serializers.ListField(child=serializers.CharField(), default=[])
     rank    = serializers.CharField(default='Novice')
     role    = serializers.CharField(default='STUDENT')
+    full_name = serializers.CharField(default='', allow_blank=True)
+    reg_no  = serializers.CharField(default='', allow_blank=True)
     age     = serializers.IntegerField(default=0)
     gender  = serializers.CharField(default='')
     streak  = serializers.IntegerField(default=0)
