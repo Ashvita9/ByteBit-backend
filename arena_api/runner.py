@@ -210,6 +210,9 @@ def run_test_cases(code: str, language: str, test_cases: list) -> dict:
     results = []
     for i, tc in enumerate(test_cases):
         input_data = tc.get('input_data', '')
+        if input_data == "NA":
+            input_data = ""
+            
         expected   = tc.get('output_data', tc.get('expected_output', ''))
 
         if lang_key == 'python':

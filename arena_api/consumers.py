@@ -361,6 +361,7 @@ class TournamentConsumer(AsyncWebsocketConsumer):
     def run_code_against_match(self, code, language):
         """Run code against the match question's test cases; return (results, all_passed)."""
         import subprocess, tempfile, os
+        from .runner import run_test_cases  # Use shared runner
 
         try:
             t = Tournament.objects.get(id=self.tournament_id)
@@ -375,64 +376,31 @@ class TournamentConsumer(AsyncWebsocketConsumer):
         if not q:
             return [], False
 
+        # Prepare test cases for runner
+        test_cases = [
+            {'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden}
+            for tc in q.test_cases
+        ]
+
+        # Use the shared runner
+        runner_result = run_test_cases(code, language, test_cases)
         results = []
-        all_passed = True
 
-        for tc in q.test_cases:
-            try:
-                if language == 'python':
-                    with tempfile.NamedTemporaryFile(suffix='.py', mode='w',
-                                                     delete=False) as f:
-                        f.write(code)
-                        tmp = f.name
-                    proc = subprocess.run(
-                        ['python', tmp],
-                        input=tc.input, capture_output=True,
-                        text=True, timeout=5,
-                    )
-                    os.unlink(tmp)
-                    actual = proc.stdout.strip()
-                else:
-                    results.append({
-                        'input': tc.input,
-                        'expected': tc.expected_output,
-                        'actual': '',
-                        'passed': False,
-                        'error': f'Language {language} not supported'
-                    })
-                    all_passed = False
-                    continue
+        # Map runner results back to format expected by frontend
+        for i, r in enumerate(runner_result['results']):
+            # Get original input (runner doesn't return it)
+            original_input = test_cases[i]['input_data']
+            
+            results.append({
+                'input':    original_input,
+                'expected': r['expected'],
+                'actual':   r['actual'],
+                'passed':   r['passed'],
+                'error':    r.get('stderr', ''),
+                'is_hidden': r.get('is_hidden', False), # Pass hidden status if frontend needs it
+            })
 
-                passed = (actual == tc.expected_output.strip())
-                if not passed:
-                    all_passed = False
-                results.append({
-                    'input': tc.input,
-                    'expected': tc.expected_output,
-                    'actual': actual,
-                    'passed': passed,
-                    'error': proc.stderr.strip() if proc.stderr else '',
-                })
-            except subprocess.TimeoutExpired:
-                all_passed = False
-                results.append({
-                    'input': tc.input,
-                    'expected': tc.expected_output,
-                    'actual': '',
-                    'passed': False,
-                    'error': 'Time Limit Exceeded',
-                })
-            except Exception as e:
-                all_passed = False
-                results.append({
-                    'input': tc.input,
-                    'expected': tc.expected_output,
-                    'actual': '',
-                    'passed': False,
-                    'error': str(e),
-                })
-
-        return results, all_passed
+        return results, runner_result['all_passed']
 
     @database_sync_to_async
     def mark_match_winner(self, user_id):
