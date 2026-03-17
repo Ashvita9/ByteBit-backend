@@ -2339,7 +2339,7 @@ def advance_tournament(request, tournament_id):
                 try:
                     profile = CoderProfile.objects.get(user_id=uid)
                     profile.xp = (profile.xp or 0) + amount
-                    profile.update_rank()
+                    profile.recalc_rank()
                     profile.save()
                 except Exception:
                     pass

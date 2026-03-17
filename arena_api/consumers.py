@@ -268,6 +268,9 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                 # Update stats for the winner
                 await self.update_stats(winner_id, won=True)
                 
+                # Check if this was the Final Match and award tournament prizes
+                await self.check_tournament_completion(winner_id)
+                
                 await self.channel_layer.group_send(
                     self.group_name,
                     {
@@ -430,12 +433,12 @@ class TournamentConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def update_stats(self, user_id, won: bool):
-        """Award XP and update stats for tournament matches."""
+        """Update stats (wins/losses/badges) for tournament matches. XP is awarded ONLY at end of tournament."""
         try:
             profile = CoderProfile.objects.get(user_id=user_id)
             if won:
                 profile.wins += 1
-                profile.xp   += 100  # Tournament win XP
+                # XP is awarded based on tournament rank, not per match.
                 # Award badges
                 if profile.wins == 1  and '🏆 First Victory' not in profile.badges:
                     profile.badges.append('🏆 First Victory')
@@ -469,3 +472,57 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                 return m.winner_id, m.winner_username
 
         return None, ''
+
+    @database_sync_to_async
+    def check_tournament_completion(self, winner_id):
+        """If this was the final match, end the tournament and award prizes based on configured XP."""
+        try:
+            t = Tournament.objects.get(id=self.tournament_id)
+            current_matches = [m for m in t.matches if m.round_num == t.current_round]
+
+            # If this is the only match in the round and it is done => FINAL ROUND
+            if len(current_matches) == 1 and current_matches[0].match_id == self.match_id and current_matches[0].status == 'done':
+                
+                # 1. Mark tournament as done
+                t.status = 'done'
+                t.winner_id = winner_id
+                t.winner_username = current_matches[0].winner_username
+                t.save()
+                
+                # 2. Award XP Rewards
+                first_id = winner_id
+                
+                # 2nd Place: The loser of this match
+                final_match = current_matches[0]
+                second_id = final_match.player2_id if final_match.player1_id == first_id else final_match.player1_id
+                
+                # 3rd Place: Losers of the previous round (Semi-Finals)
+                third_ids = []
+                if t.current_round > 1:
+                     semi_matches = [m for m in t.matches if m.round_num == t.current_round - 1]
+                     third_ids = [
+                        (m.player2_id if m.winner_id == m.player1_id else m.player1_id)
+                        for m in semi_matches
+                        if m.status == 'done' and m.winner_id
+                     ]
+                
+                def _award(uid, amount):
+                    if not uid or not amount: return
+                    try:
+                        p = CoderProfile.objects.get(user_id=uid)
+                        p.xp += amount
+                        p.recalc_rank()
+                        p.save()
+                    except: pass
+                
+                xp1 = getattr(t, 'xp_first', 1000)
+                xp2 = getattr(t, 'xp_second', 600)
+                xp3 = getattr(t, 'xp_third', 300)
+
+                _award(first_id,  xp1)
+                _award(second_id, xp2)
+                for tid in third_ids:
+                    _award(tid, xp3)
+                    
+        except Exception as e:
+            print(f'Error finishing tournament: {e}')
