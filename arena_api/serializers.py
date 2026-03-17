@@ -23,6 +23,7 @@ class SubmissionSerializer(serializers.Serializer):
     is_active      = serializers.BooleanField(default=True)
     status         = serializers.ChoiceField(choices=['Submitted', 'Unsubmitted'], default='Submitted')
     review_status  = serializers.ChoiceField(choices=['pending', 'graded'], default='graded')
+    run_results    = serializers.ListField(child=serializers.DictField(), default=[])
     last_edited_at = serializers.DateTimeField(read_only=True)
     created_at     = serializers.DateTimeField(read_only=True)
 

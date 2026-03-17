@@ -365,6 +365,7 @@ def classroom_detail(request, classroom_id):
                             'remarks':        s.remarks,
                             'review_status':  getattr(s, 'review_status', 'graded'),
                             'is_active':      getattr(s, 'is_active', True),
+                            'run_results':    getattr(s, 'run_results', []), # Added
                             'created_at':     s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
                         })
                 
@@ -387,6 +388,11 @@ def classroom_detail(request, classroom_id):
                 tasks.append({
                     'id': str(t.id),
                     'title': t.title,
+                    'description': t.description,  # Added
+                    'test_cases': [
+                        {'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden}
+                        for tc in t.test_cases
+                    ], # Added
                     'difficulty': t.difficulty,
                     'tech_stack': t.tech_stack,
                     'task_type': t.task_type,

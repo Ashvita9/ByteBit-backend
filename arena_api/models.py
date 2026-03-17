@@ -81,6 +81,7 @@ class Submission(EmbeddedDocument):
     # Versioning
     is_active    = fields.BooleanField(default=True)
     status       = fields.StringField(default='Submitted', choices=['Submitted', 'Unsubmitted'])
+    run_results  = fields.ListField(fields.DictField(), default=[]) # Added
     last_edited_at = fields.DateTimeField(default=datetime.utcnow)
     created_at   = fields.DateTimeField(default=datetime.utcnow)
 
