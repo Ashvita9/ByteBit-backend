@@ -2008,6 +2008,33 @@ def joined_tournaments(request):
     ts = Tournament.objects.filter(participant_ids=uid)
     return Response([_tournament_data(t) for t in ts])
 
+def _try_auto_start_tournament(t):
+    """Helper: Transitions tournament from waiting -> active if conditions met."""
+    if t.status != 'waiting':
+        return False
+    
+    # Must have questions
+    if len(t.questions) == 0:
+        return False
+
+    # Must have at least 2 participants
+    if len(t.participant_ids) < 2:
+        return False
+    
+    # Start it
+    t.current_round = 1
+    t.status = 'active'
+    if not t.start_time:
+         t.start_time = datetime.now(timezone.utc)
+    
+    t.matches = _generate_round(
+        t.participant_ids,
+        dict(t.participant_usernames),
+        1,
+        len(t.questions),
+    )
+    t.save()
+    return True
 
 @api_view(['GET', 'DELETE'])
 @permission_classes([permissions.IsAuthenticated])
@@ -2019,6 +2046,15 @@ def tournament_detail(request, tournament_id):
         return Response({'error': 'Not found'}, status=404)
 
     if request.method == 'GET':
+        # Auto-start check (time-based)
+        if t.status == 'waiting' and t.start_time:
+             now = datetime.now(timezone.utc)
+             if t.start_time.tzinfo is None:
+                 # Assume UTC if naive, to be safe
+                 t.start_time = t.start_time.replace(tzinfo=timezone.utc)
+             if t.start_time <= now:
+                 _try_auto_start_tournament(t)
+
         return Response(_tournament_data(t))
 
     if request.method == 'DELETE':
@@ -2113,7 +2149,16 @@ def join_tournament(request):
     usernames = dict(t.participant_usernames)
     usernames[uid] = request.user.username
     t.participant_usernames = usernames
-    t.save()
+    
+    # Auto-start check (capacity)
+    if len(t.participant_ids) >= t.max_players:
+        # Try starting if full
+        did_start = _try_auto_start_tournament(t)
+        if not did_start:
+             t.save() # Just save the new participant if failed to start (e.g. no questions)
+    else:
+        t.save()
+
     return Response(_tournament_data(t))
 
 
