@@ -16,12 +16,15 @@ from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 import arena_api.routing
+from backend.token_auth import JwtAuthMiddleware
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
     "websocket": AuthMiddlewareStack(
-        URLRouter(
-            arena_api.routing.websocket_urlpatterns
+        JwtAuthMiddleware(
+            URLRouter(
+                arena_api.routing.websocket_urlpatterns
+            )
         )
     ),
 })

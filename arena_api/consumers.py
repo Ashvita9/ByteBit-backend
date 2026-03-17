@@ -218,6 +218,11 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                 self.group_name,
                 {'type': 'players_ready', 'players': players}
             )
+        else:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Authentication failed. Please refresh or login again.'
+            }))
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
