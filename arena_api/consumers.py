@@ -351,6 +351,9 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                     {'input': tc.input_data, 'expected_output': tc.output_data}
                     for tc in q.test_cases
                 ],
+                'techStack':          getattr(t, 'tech_stack', 'General'),
+                'allowCopyPaste':     getattr(t, 'allow_copy_paste', True),
+                'allowTabCompletion': getattr(t, 'allow_tab_completion', True),
             }
         else:
             print(f"Debug: Match {self.match_id} q_idx={match.question_index} out of range (len={len(t.questions)})")

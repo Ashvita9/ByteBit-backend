@@ -1905,6 +1905,9 @@ def _tournament_data(t):
         'xpFirst':             t.xp_first,
         'xpSecond':            t.xp_second,
         'xpThird':             t.xp_third,
+        'techStack':           getattr(t, 'tech_stack', 'General'),
+        'allowCopyPaste':      getattr(t, 'allow_copy_paste', True),
+        'allowTabCompletion':  getattr(t, 'allow_tab_completion', True),
         'isLocked':            t.is_locked,
         'createdAt':           to_iso(t.created_at),
     }
@@ -1991,6 +1994,12 @@ def create_tournament(request):
     xp_first       = int(request.data.get('xpFirst', 1000))
     xp_second      = int(request.data.get('xpSecond', 600))
     xp_third       = int(request.data.get('xpThird', 300))
+    
+    tech_stack           = request.data.get('techStack', 'General')
+    allow_copy_paste     = request.data.get('allowCopyPaste', True)
+    allow_tab_completion = request.data.get('allowTabCompletion', True)
+
+    provided_questions = request.data.get('questions', [])
 
     # Optional ISO start_time
     start_time_str = request.data.get('startTime', None)
@@ -2005,33 +2014,43 @@ def create_tournament(request):
     if not name:
         return Response({'error': 'name required'}, status=400)
 
-    # Calculate required questions based on max players (Binary Tree: N-1 matches = N-1 questions)
-    # We create placeholder questions for the teacher to fill.
-    num_questions_needed = max_players - 1
     questions = []
     
-    # Generate question titles based on round structure (assuming single elimination)
-    # Round 1: N/2 matches
-    # Round 2: N/4 matches
-    # ...
-    # Final: 1 match
-    
-    current_round_matches = max_players // 2
-    round_num = 1
-    q_index = 0
-    
-    while current_round_matches >= 1:
-        for m in range(current_round_matches):
-            q_title = f"Round {round_num} - Match {m+1}" if current_round_matches > 1 else "Final Round"
+    if provided_questions and isinstance(provided_questions, list):
+        # Use provided questions
+        from .models import TestCase as TC
+        for pq in provided_questions:
+            tcs = []
+            for tc in pq.get('testCases', []):
+                tcs.append(TC(
+                    input_data=tc.get('input', ''),
+                    output_data=tc.get('expected_output', '')
+                ))
+            
             questions.append(TournamentQuestion(
-                title=q_title,
-                description="Teacher needs to add description here.",
-                difficulty="Easy",
-                test_cases=[]
+                title=pq.get('title', 'Untitled Question'),
+                description=pq.get('description', ''),
+                difficulty=pq.get('difficulty', 'Easy'),
+                test_cases=tcs
             ))
-            q_index += 1
-        current_round_matches //= 2
-        round_num += 1
+    else:
+        # Generate placeholders if no questions provided
+        # Calculate required questions based on max players (Binary Tree: N-1 matches = N-1 questions)
+        num_questions_needed = max_players - 1
+        current_round_matches = max_players // 2
+        round_num = 1
+        
+        while current_round_matches >= 1:
+            for m in range(current_round_matches):
+                q_title = f"Round {round_num} - Match {m+1}" if current_round_matches > 1 else "Final Round"
+                questions.append(TournamentQuestion(
+                    title=q_title,
+                    description="Teacher needs to add description here.",
+                    difficulty="Easy",
+                    test_cases=[]
+                ))
+            current_round_matches //= 2
+            round_num += 1
 
     code = gen_code(6)
     t = Tournament(
@@ -2047,6 +2066,9 @@ def create_tournament(request):
         xp_first=max(0, xp_first),
         xp_second=max(0, xp_second),
         xp_third=max(0, xp_third),
+        tech_stack=tech_stack,
+        allow_copy_paste=allow_copy_paste,
+        allow_tab_completion=allow_tab_completion,
     )
     t.save()
     return Response(_tournament_data(t), status=201)

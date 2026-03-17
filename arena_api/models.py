@@ -318,16 +318,17 @@ class Tournament(Document):
     winner_username      = fields.StringField(default='')
     max_players          = fields.IntField(default=10)
     description          = fields.StringField(default='')
-    start_time           = fields.DateTimeField(default=None)
-    match_duration       = fields.IntField(default=30)  # minutes
-    xp_first             = fields.IntField(default=1000)
-    xp_second            = fields.IntField(default=600)
-    xp_third             = fields.IntField(default=300)
     start_time           = fields.DateTimeField(null=True)
     match_duration       = fields.IntField(default=30)   # minutes per match
     xp_first             = fields.IntField(default=1000)
     xp_second            = fields.IntField(default=600)
     xp_third             = fields.IntField(default=300)
+    
+    # Settings
+    tech_stack           = fields.StringField(choices=TECH_STACKS, default="General")
+    allow_copy_paste     = fields.BooleanField(default=True)
+    allow_tab_completion = fields.BooleanField(default=True)
+
     is_locked            = fields.BooleanField(default=False)
     created_at           = fields.DateTimeField(default=datetime.utcnow)
 
