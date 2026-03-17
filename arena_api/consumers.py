@@ -208,6 +208,12 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                     'type':     'question_data',
                     'question': question,
                 }))
+            else:
+                await self.send(text_data=json.dumps({
+                    'type':    'error',
+                    'message': 'Failed to load question. Please contact support.',
+                }))
+
             await self.channel_layer.group_send(
                 self.group_name,
                 {'type': 'players_ready', 'players': players}
