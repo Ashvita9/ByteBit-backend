@@ -1910,15 +1910,44 @@ def _tournament_data(t):
     }
 
 
-def _generate_round(participant_ids, participant_usernames, round_num, questions_count):
-    """Pair participants randomly; odd one out gets a bye."""
+def _generate_round(participant_ids, participant_usernames, round_num, questions, starting_q_index=0):
+    """Pair participants randomly; match them to sequential questions."""
     shuffled = list(participant_ids)
-    random.shuffle(shuffled)
+    
+    # Only shuffle on round 1 to randomize initial seeding
+    if round_num == 1:
+        random.shuffle(shuffled)
+        
     matches = []
+    
+    # Calculate question assignment
+    # Round 1 uses questions[0] ... questions[N/2 - 1]
+    # Round 2 uses questions[N/2] ...
+    # We need to track which question index we are at.
+    # The caller needs to pass the correct starting index for this round?
+    # Or we can deduce it if we know the full structure?
+    # Simpler: The caller (advance_tournament) usually knows the state.
+    # But `t.questions` is a list.
+    # Let's assume sequential assignment:
+    # Round 1 matches get question 0, 1, 2...
+    # But wait, `_generate_round` is called for Round 1.
+    # For subsequent rounds, `advance_tournament` calls it.
+    
+    current_q_idx = starting_q_index
+
     for i in range(0, len(shuffled), 2):
         p1_id = shuffled[i]
         match_id = f"R{round_num}M{i // 2 + 1}"
-        q_index = random.randint(0, max(0, questions_count - 1))
+        
+        # Assign next question if available
+        q_idx = 0 
+        if current_q_idx < len(questions):
+            q_idx = current_q_idx
+            current_q_idx += 1
+        else:
+            # If we run out of unique questions (e.g. fewer questions than matches), fallback to 0 or last
+            q_idx = len(questions) - 1 if len(questions) > 0 else 0
+
         if i + 1 < len(shuffled):
             p2_id = shuffled[i + 1]
             m = TournamentMatch(
@@ -1929,10 +1958,12 @@ def _generate_round(participant_ids, participant_usernames, round_num, questions
                 player2_id=p2_id,
                 player2_username=participant_usernames.get(p2_id, ''),
                 status='pending',
-                question_index=q_index,
+                question_index=q_idx,
             )
         else:
             # Bye: player advances automatically
+            # Byes don't consume a question usually, as no match happens?
+            # Or should we just mark it done?
             m = TournamentMatch(
                 match_id=match_id,
                 round_num=round_num,
@@ -1943,7 +1974,7 @@ def _generate_round(participant_ids, participant_usernames, round_num, questions
                 winner_id=p1_id,
                 winner_username=participant_usernames.get(p1_id, ''),
                 status='bye',
-                question_index=q_index,
+                question_index=q_idx, # Assign it but it won't be played
             )
         matches.append(m)
     return matches
@@ -1974,6 +2005,34 @@ def create_tournament(request):
     if not name:
         return Response({'error': 'name required'}, status=400)
 
+    # Calculate required questions based on max players (Binary Tree: N-1 matches = N-1 questions)
+    # We create placeholder questions for the teacher to fill.
+    num_questions_needed = max_players - 1
+    questions = []
+    
+    # Generate question titles based on round structure (assuming single elimination)
+    # Round 1: N/2 matches
+    # Round 2: N/4 matches
+    # ...
+    # Final: 1 match
+    
+    current_round_matches = max_players // 2
+    round_num = 1
+    q_index = 0
+    
+    while current_round_matches >= 1:
+        for m in range(current_round_matches):
+            q_title = f"Round {round_num} - Match {m+1}" if current_round_matches > 1 else "Final Round"
+            questions.append(TournamentQuestion(
+                title=q_title,
+                description="Teacher needs to add description here.",
+                difficulty="Easy",
+                test_cases=[]
+            ))
+            q_index += 1
+        current_round_matches //= 2
+        round_num += 1
+
     code = gen_code(6)
     t = Tournament(
         name=name,
@@ -1982,6 +2041,7 @@ def create_tournament(request):
         teacher_username=request.user.username,
         max_players=max(2, min(max_players, 32)),
         description=description,
+        questions=questions,
         start_time=start_time,
         match_duration=max(5, min(match_duration, 180)),
         xp_first=max(0, xp_first),
@@ -2013,9 +2073,14 @@ def _try_auto_start_tournament(t):
     if t.status != 'waiting':
         return False
     
-    # Must have questions
-    if len(t.questions) == 0:
+    # Must have questions (placeholder check)
+    req_q_count = len(t.participant_ids) - 1
+    if len(t.questions) < req_q_count:
         return False
+        
+    for i in range(req_q_count):
+        if not t.questions[i].test_cases:
+            return False # Wait until filled
 
     # Must have at least 2 participants
     if len(t.participant_ids) < 2:
@@ -2031,7 +2096,8 @@ def _try_auto_start_tournament(t):
         t.participant_ids,
         dict(t.participant_usernames),
         1,
-        len(t.questions),
+        t.questions,
+        starting_q_index=0
     )
     t.save()
     return True
@@ -2067,7 +2133,7 @@ def tournament_detail(request, tournament_id):
 @api_view(['POST'])
 @permission_classes([IsTeacher])
 def add_tournament_question(request, tournament_id):
-    """POST /api/tournaments/<id>/questions/ — add a question."""
+    """POST /api/tournaments/<id>/questions/ — update an existing placeholder question or add new."""
     try:
         t = Tournament.objects.get(id=tournament_id)
     except Exception:
@@ -2079,6 +2145,7 @@ def add_tournament_question(request, tournament_id):
     description = request.data.get('description', '').strip()
     difficulty  = request.data.get('difficulty', 'Easy')
     raw_tc      = request.data.get('testCases', [])
+    q_index     = request.data.get('questionIndex', -1) # Optional index to update
 
     if not title or not description:
         return Response({'error': 'title and description required'}, status=400)
@@ -2088,13 +2155,21 @@ def add_tournament_question(request, tournament_id):
         TC(input_data=tc.get('input', ''), output_data=tc.get('expected_output', ''))
         for tc in raw_tc
     ]
-    q = TournamentQuestion(
+    
+    q_data = TournamentQuestion(
         title=title,
         description=description,
         difficulty=difficulty,
         test_cases=test_cases,
     )
-    t.questions.append(q)
+    
+    # If valid index provided, update that question
+    if 0 <= q_index < len(t.questions):
+        t.questions[q_index] = q_data
+    else:
+        # Otherwise append new (fallback)
+        t.questions.append(q_data)
+
     t.save()
     return Response(_tournament_data(t))
 
@@ -2176,8 +2251,19 @@ def start_tournament(request, tournament_id):
         return Response({'error': 'Tournament already started'}, status=400)
     if len(t.participant_ids) < 2:
         return Response({'error': 'Need at least 2 participants'}, status=400)
-    if len(t.questions) == 0:
-        return Response({'error': 'Add at least one question before starting'}, status=400)
+
+    # Determine required number of active questions (N-1 for single elimination)
+    req_q_count = len(t.participant_ids) - 1
+    
+    if len(t.questions) < req_q_count:
+        return Response({'error': f'Not enough question slots. Need {req_q_count}.'}, status=400)
+
+    # Verify that the required questions have test cases (are not empty placeholders)
+    for i in range(req_q_count):
+        if not t.questions[i].test_cases:
+            return Response({
+                'error': f'Question {i+1} ("{t.questions[i].title}") is empty. Please add test cases before starting.'
+            }, status=400)
 
     t.current_round = 1
     t.status = 'active'
@@ -2185,7 +2271,8 @@ def start_tournament(request, tournament_id):
         t.participant_ids,
         dict(t.participant_usernames),
         1,
-        len(t.questions),
+        t.questions,
+        starting_q_index=0
     )
     t.save()
     return Response(_tournament_data(t))
@@ -2266,12 +2353,27 @@ def advance_tournament(request, tournament_id):
 
         return Response(_tournament_data(t))
 
-    next_round = t.current_round + 1
+    # Calculate next question index
+    last_idx = -1
+    for m in t.matches:
+        if m.question_index > last_idx:
+            last_idx = m.question_index
+            
+    next_start_idx = last_idx + 1
+    
+    # Check if we have enough questions (next round needs len(winners)//2 questions)
+    needed = len(winners) // 2
+    if next_start_idx + needed > len(t.questions):
+        # We might have fewer questions generated than needed if max_players was small initially?
+        # But create_tournament generates for max_players.
+        pass
+
     new_matches = _generate_round(
         winners,
         dict(t.participant_usernames),
         next_round,
-        len(t.questions),
+        t.questions,
+        starting_q_index=next_start_idx
     )
     t.matches = list(t.matches) + new_matches
     t.current_round = next_round

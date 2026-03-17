@@ -330,7 +330,7 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                 'description': q.description,
                 'difficulty':  q.difficulty,
                 'testCases': [
-                    {'input': tc.input, 'expected_output': tc.expected_output}
+                    {'input': tc.input_data, 'expected_output': tc.output_data}
                     for tc in q.test_cases
                 ],
             }
