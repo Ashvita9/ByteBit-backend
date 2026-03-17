@@ -290,6 +290,9 @@ class TournamentConsumer(AsyncWebsocketConsumer):
 
         winner_id, winner_username = await self.force_match_winner(winner_id)
         if winner_id:
+            # Check if this was the Final Match and award/delete tournament if so
+            await self.check_tournament_completion(winner_id)
+
             await self.channel_layer.group_send(
                 self.group_name,
                 {
@@ -486,13 +489,7 @@ class TournamentConsumer(AsyncWebsocketConsumer):
             # If this is the only match in the round and it is done => FINAL ROUND
             if len(current_matches) == 1 and current_matches[0].match_id == self.match_id and current_matches[0].status == 'done':
                 
-                # 1. Mark tournament as done
-                t.status = 'done'
-                t.winner_id = winner_id
-                t.winner_username = current_matches[0].winner_username
-                t.save()
-                
-                # 2. Award XP Rewards
+                # 1. Award XP Rewards
                 first_id = winner_id
                 
                 # 2nd Place: The loser of this match
@@ -526,6 +523,10 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                 _award(second_id, xp2)
                 for tid in third_ids:
                     _award(tid, xp3)
+
+                # 2. Delete the tournament immediately as requested
+                t.delete()
                     
         except Exception as e:
+            print(f"Error finishing tournament: {e}")
             print(f'Error finishing tournament: {e}')
