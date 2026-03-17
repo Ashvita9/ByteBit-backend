@@ -265,6 +265,9 @@ class TournamentConsumer(AsyncWebsocketConsumer):
         if passed:
             winner_id, winner_username = await self.mark_match_winner(str(self.user.id))
             if winner_id:
+                # Update stats for the winner
+                await self.update_stats(winner_id, won=True)
+                
                 await self.channel_layer.group_send(
                     self.group_name,
                     {
@@ -424,6 +427,28 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                 return m.winner_id, m.winner_username
 
         return None, ''
+
+    @database_sync_to_async
+    def update_stats(self, user_id, won: bool):
+        """Award XP and update stats for tournament matches."""
+        try:
+            profile = CoderProfile.objects.get(user_id=user_id)
+            if won:
+                profile.wins += 1
+                profile.xp   += 100  # Tournament win XP
+                # Award badges
+                if profile.wins == 1  and '🏆 First Victory' not in profile.badges:
+                    profile.badges.append('🏆 First Victory')
+                if profile.wins == 5  and '⭐ 5-Win Streak'  not in profile.badges:
+                    profile.badges.append('⭐ 5-Win Streak')
+                if profile.wins == 10 and '💎 Legend'        not in profile.badges:
+                    profile.badges.append('💎 Legend')
+            else:
+                profile.losses += 1
+            profile.recalc_rank()
+            profile.save()
+        except Exception as e:
+            print(f'Error updating stats: {e}')
 
     @database_sync_to_async
     def force_match_winner(self, winner_id):
