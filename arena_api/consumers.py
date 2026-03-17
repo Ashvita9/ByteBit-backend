@@ -326,6 +326,7 @@ class TournamentConsumer(AsyncWebsocketConsumer):
 
         match = next((m for m in t.matches if m.match_id == self.match_id), None)
         if not match:
+            print(f"Match {self.match_id} not found in tournament {self.tournament_id}")
             return None, []
 
         question = None
@@ -340,6 +341,8 @@ class TournamentConsumer(AsyncWebsocketConsumer):
                     for tc in q.test_cases
                 ],
             }
+        else:
+            print(f"Debug: Match {self.match_id} q_idx={match.question_index} out of range (len={len(t.questions)})")
 
         players = []
         usernames = dict(t.participant_usernames)
