@@ -2,7 +2,7 @@
 import random
 import string
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, viewsets
@@ -1853,6 +1853,12 @@ import uuid
 
 def _tournament_data(t):
     """Serialize a Tournament document to a plain dict."""
+    def to_iso(dt_val):
+        if not dt_val: return None
+        if dt_val.tzinfo is None:
+            dt_val = dt_val.replace(tzinfo=timezone.utc)
+        return dt_val.isoformat()
+
     def _match_data(m):
         return {
             'matchId':         m.match_id,
@@ -1894,13 +1900,13 @@ def _tournament_data(t):
         'winnerUsername':      t.winner_username,
         'maxPlayers':          t.max_players,
         'description':         t.description or '',
-        'startTime':           t.start_time.isoformat() if t.start_time else None,
+        'startTime':           to_iso(t.start_time),
         'matchDuration':       t.match_duration,
         'xpFirst':             t.xp_first,
         'xpSecond':            t.xp_second,
         'xpThird':             t.xp_third,
         'isLocked':            t.is_locked,
-        'createdAt':           t.created_at.isoformat(),
+        'createdAt':           to_iso(t.created_at),
     }
 
 
