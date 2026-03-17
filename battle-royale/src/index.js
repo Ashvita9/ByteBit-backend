@@ -83,6 +83,39 @@ async function boot() {
             console.log(`   Environment: ${config.nodeEnv}`);
             console.log(`   Health: http://localhost:${config.port}/health\n`);
         });
+
+        // Auto-start polling loop (runs every 5 seconds)
+        const tournamentService = require('./services/tournamentService');
+        setInterval(async () => {
+            try {
+                // Find tournaments that are waiting, have a start_time, and start_time <= now
+                const toStart = await db('battle_royales')
+                    .where('status', 'waiting')
+                    .whereNotNull('start_time')
+                    .where('start_time', '<=', db.fn.now());
+
+                for (const royale of toStart) {
+                    const participants = await db('battle_royale_participants')
+                        .where({ royale_id: royale.id });
+                    
+                    if (participants.length >= 2) {
+                        console.log(`auto-starting tournament ${royale.id} (${royale.title})`);
+                        await tournamentService.startTournament(royale.id, io);
+                    } else if (participants.length < 2) {
+                        // If past start time and not enough players, maybe just cancel or wait?
+                        // For now we do nothing, or we could extend start_time.
+                        // We will delay the start time slightly to avoid spamming the DB or we cancel.
+                        // Let's cancel it to keep it clean.
+                        console.log(`cancelling tournament ${royale.id} due to insufficient players at start time`);
+                        await db('battle_royales').where({ id: royale.id }).update({ status: 'cancelled' });
+                        io.to(`royale:${royale.id}`).emit('tournament:cancelled', { reason: 'Not enough players to start.' });
+                    }
+                }
+            } catch (err) {
+                console.error('Auto-start polling error:', err);
+            }
+        }, 5000);
+
     } catch (err) {
         console.error('❌ Failed to start server:', err);
         process.exit(1);

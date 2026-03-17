@@ -109,7 +109,7 @@ function pickQuestion(difficulty, usedIds = []) {
 
 // ── Create ──────────────────────────────────────────────────────────
 
-async function createRoyale({ title, difficulty, maxPlayers, type, user }) {
+async function createRoyale({ title, difficulty, maxPlayers, type, startTime, user }) {
     const code = generateCode();
     const royaleType = user.role === 'ADMIN' ? (type || 'public') : 'private';
 
@@ -122,6 +122,7 @@ async function createRoyale({ title, difficulty, maxPlayers, type, user }) {
             creator_role: user.role,
             difficulty: difficulty || 'Easy',
             type: royaleType,
+            start_time: startTime || null,
             max_players: Math.min(maxPlayers || config.game.defaultMaxPlayers, 10),
         })
         .returning('*');

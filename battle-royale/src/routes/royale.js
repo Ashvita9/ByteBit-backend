@@ -15,7 +15,7 @@ const tournamentService = require('../services/tournamentService');
  */
 router.post('/', authenticate, requireRole('ADMIN', 'TEACHER'), async (req, res) => {
     try {
-        const { title, difficulty, maxPlayers, type } = req.body;
+        const { title, difficulty, maxPlayers, type, startTime } = req.body;
 
         if (!title) {
             return res.status(400).json({ error: 'title is required' });
@@ -26,6 +26,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'TEACHER'), async (req, res)
             difficulty,
             maxPlayers,
             type,
+            startTime,
             user: req.user,
         });
 
@@ -67,6 +68,7 @@ router.get('/:id', authenticate, async (req, res) => {
                 difficulty: details.difficulty,
                 type: details.type,
                 status: details.status,
+                startTime: details.start_time,
                 maxPlayers: details.max_players,
                 currentRound: details.current_round,
                 totalRounds: details.total_rounds,
