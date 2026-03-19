@@ -196,7 +196,7 @@ class Exam(Document):
 
 
 class ExamViolation(EmbeddedDocument):
-    type      = fields.StringField(choices=['tab_switch', 'fullscreen_exit'])
+    type      = fields.StringField(choices=['tab_switch', 'fullscreen_exit', 'screenshot_attempt', 'copy_paste'])
     timestamp = fields.DateTimeField(default=datetime.utcnow)
 
 

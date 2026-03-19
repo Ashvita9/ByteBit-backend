@@ -2841,22 +2841,81 @@ def log_exam_violation(request, exam_id):
         sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
     except Exception:
         return Response({'error': 'Active session not found'}, status=404)
+    
+    # Already forced - don't allow further violations
+    if sub.status != 'in_progress':
+        return Response({'forced': True, 'malpractice': True}, status=403)
         
     vtype = request.data.get('type')
-    if vtype not in ['tab_switch', 'fullscreen_exit']:
+    VALID_TYPES = ['tab_switch', 'fullscreen_exit', 'screenshot_attempt', 'copy_paste']
+    if vtype not in VALID_TYPES:
         return Response({'error': 'Invalid violation type'}, status=400)
-        
+
+    VIOLATION_LABELS = {
+        'tab_switch': 'Tab Switch',
+        'fullscreen_exit': 'Fullscreen Exit',
+        'screenshot_attempt': 'Screenshot Attempt',
+        'copy_paste': 'Copy/Paste Attempt',
+    }
+    label = VIOLATION_LABELS.get(vtype, vtype)
+
     sub.violations.append(ExamViolation(type=vtype, timestamp=datetime.utcnow()))
-    sub.warnings_left -= 1
-    
-    if sub.warnings_left <= 0:
-        sub.status = 'forced_submitted'
+    sub.warnings_left = max(0, sub.warnings_left - 1)
+
+    is_forced = sub.warnings_left <= 0
+
+    if is_forced:
+        sub.status = 'malpractice'
         sub.submitted_at = datetime.utcnow()
+        sub.manual_evaluation_needed = True
         sub.save()
-        return Response({'message': 'Forced submission due to violations', 'forced': True}, status=403)
-        
+
+        # Notify teacher of forced expulsion
+        try:
+            exam = Exam.objects.get(id=exam_id)
+            UserNotification(
+                user_id=exam.teacher_id,
+                title='🚨 MALPRACTICE ALERT — Student Expelled',
+                message=(
+                    f'{sub.student_username} was automatically expelled from '
+                    f'"{exam.title}" after exceeding the maximum violation limit. '
+                    f'Final violation: {label}. Exam submission has been locked and flagged.'
+                ),
+                notif_type='general',
+                extra_id=str(sub.id),
+                extra_name=sub.student_username,
+            ).save()
+        except Exception:
+            pass
+
+        return Response({
+            'forced': True,
+            'malpractice': True,
+            'message': 'You have been removed from the exam for repeated violations.'
+        }, status=403)
+
     sub.save()
-    return Response({'warnings_left': sub.warnings_left, 'forced': False})
+
+    # Notify teacher of each individual violation
+    try:
+        exam = Exam.objects.get(id=exam_id)
+        violations_count = 3 - sub.warnings_left
+        UserNotification(
+            user_id=exam.teacher_id,
+            title=f'⚠️ Exam Violation — {sub.student_username}',
+            message=(
+                f'{sub.student_username} triggered a "{label}" violation during '
+                f'"{exam.title}". Warnings remaining: {sub.warnings_left}/3 '
+                f'(violation {violations_count}/3).'
+            ),
+            notif_type='general',
+            extra_id=str(sub.id),
+            extra_name=sub.student_username,
+        ).save()
+    except Exception:
+        pass
+
+    return Response({'warnings_left': sub.warnings_left, 'forced': False, 'malpractice': False})
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
