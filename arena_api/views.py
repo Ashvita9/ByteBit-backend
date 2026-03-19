@@ -2600,20 +2600,31 @@ def create_exam(request):
     if str(c.teacher_id) != str(request.user.id):
         return Response({'error': 'Forbidden'}, status=403)
 
+    # Safe date parsing
+    def parse_dt(val):
+        if not val: return None
+        try:
+            return datetime.fromisoformat(val.replace('Z', '+00:00'))
+        except Exception:
+            return None
+
     exam = Exam(
         title=data.get('title'),
         description=data.get('description', ''),
         classroom_id=classroom_id,
         teacher_id=str(request.user.id),
         duration_minutes=int(data.get('duration_minutes', 60)),
-        start_time=datetime.fromisoformat(data.get('start_time').replace('Z', '+00:00')),
-        end_time=datetime.fromisoformat(data.get('end_time').replace('Z', '+00:00')),
-        random_assignment=bool(data.get('random_assignment', True)),
+        start_time=parse_dt(data.get('start_time')),
+        end_time=parse_dt(data.get('end_time')),
+        random_assignment=bool(data.get('randomize_sets', data.get('random_assignment', True))), # Map randomize_sets
         allow_copy_paste=bool(data.get('allow_copy_paste', False)),
         allow_tab_completion=bool(data.get('allow_tab_completion', False)),
-        fullscreen_required=bool(data.get('fullscreen_required', True)),
+        fullscreen_required=bool(data.get('require_fullscreen', data.get('fullscreen_required', True))), # Map require_fullscreen
         pass_threshold_test_cases=int(data.get('pass_threshold_test_cases', 2))
     )
+
+    if not exam.start_time or not exam.end_time:
+        return Response({'error': 'Start time and End time are required and must be valid dates.'}, status=400)
     
     sets_data = data.get('sets', [])
     for sd in sets_data:
@@ -2949,10 +2960,18 @@ def exam_detail(request, exam_id):
         e.description = data.get('description', e.description)
         e.duration_minutes = int(data.get('duration_minutes', e.duration_minutes))
         
+        # Safe date parsing
+        def parse_dt(val):
+            if not val: return None
+            try:
+                return datetime.fromisoformat(val.replace('Z', '+00:00'))
+            except Exception:
+                return None
+
         if data.get('start_time'):
-            e.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
+            e.start_time = parse_dt(data['start_time'])
         if data.get('end_time'):
-            e.end_time = datetime.fromisoformat(data['end_time'].replace('Z', '+00:00'))
+            e.end_time = parse_dt(data['end_time'])
             
         e.random_assignment = data.get('randomize_sets', e.random_assignment) # Field name match
         e.allow_copy_paste = data.get('allow_copy_paste', e.allow_copy_paste)
