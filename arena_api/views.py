@@ -2798,10 +2798,16 @@ def start_exam_session(request, exam_id):
 @permission_classes([permissions.IsAuthenticated])
 def submit_exam_question(request, exam_id):
     """Saves code for a single question."""
+    uid = str(request.user.id)
     try:
-        sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
-    except Exception:
-        return Response({'error': 'Active session not found'}, status=404)
+        sub = ExamSubmission.objects.filter(exam_id=exam_id, student_id=uid, status='in_progress').order_by('-started_at').first()
+        if not sub:
+            return Response({
+                'error': 'Active session not found',
+                'debug': f'Exam: {exam_id}, Student: {uid}'
+            }, status=404)
+    except Exception as e:
+        return Response({'error': f'Database error: {str(e)}'}, status=500)
         
     exam = Exam.objects.get(id=exam_id)
     now = datetime.utcnow()
@@ -2837,10 +2843,16 @@ def submit_exam_question(request, exam_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def log_exam_violation(request, exam_id):
+    uid = str(request.user.id)
     try:
-        sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
-    except Exception:
-        return Response({'error': 'Active session not found'}, status=404)
+        sub = ExamSubmission.objects.filter(exam_id=exam_id, student_id=uid, status='in_progress').order_by('-started_at').first()
+        if not sub:
+            return Response({
+                'error': 'Active session not found',
+                'debug': f'Exam: {exam_id}, Student: {uid}'
+            }, status=404)
+    except Exception as e:
+        return Response({'error': f'Database error: {str(e)}'}, status=500)
     
     # Already forced - don't allow further violations
     if sub.status != 'in_progress':
