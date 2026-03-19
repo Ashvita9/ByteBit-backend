@@ -336,18 +336,18 @@ def _classroom_data(c, include_students=False):
     return d
 
 
-
 @api_view(['GET', 'POST'])
-@permission_classes([IsTeacher])
+@permission_classes([permissions.IsAuthenticated])
 def classrooms(request):
     """
-    GET  /api/classrooms/      â€” list classrooms owned by this teacher
-    POST /api/classrooms/      â€” create a new classroom
+    GET: Teacher lists their own classrooms with student info (Optimized).
+    POST: Teacher creates a new classroom.
     """
+    uid = str(request.user.id)
     if request.method == 'GET':
-        cs = list(Classroom.objects.filter(teacher_id=str(request.user.id)))
+        cs = Classroom.objects.filter(teacher_id=uid)
         
-        # Pre-fetch all students for all these classrooms in ONE query
+        # Optimization: Pre-fetch all student usernames for these classrooms
         all_student_ids = set()
         for c in cs:
             all_student_ids.update(c.student_ids)
@@ -357,17 +357,15 @@ def classrooms(request):
         
         results = []
         for c in cs:
-            # We use include_students=False then manually inject, or update _classroom_data
             data = _classroom_data(c, include_students=False)
             data['students'] = [
-                {'id': str(uid), 'username': student_map.get(str(uid), 'Unknown User')}
-                for uid in c.student_ids
+                {'id': str(sid), 'username': student_map.get(str(sid), 'Unknown')}
+                for sid in c.student_ids
             ]
             results.append(data)
-            
         return Response(results)
 
-    # POST â€” create
+    # POST — create
     name = request.data.get('name', '').strip()
     ctype = request.data.get('type', 'Public')
     if not name:
@@ -384,9 +382,9 @@ def classrooms(request):
 @permission_classes([permissions.IsAuthenticated])
 def classroom_detail(request, classroom_id):
     """
-    GET    /api/classrooms/<id>/  â€” get detail (students, announcements, tasks)
-    PATCH  /api/classrooms/<id>/  â€” update name/type/is_locked (teacher only)
-    DELETE /api/classrooms/<id>/  â€” delete classroom (teacher only)
+    GET    /api/classrooms/<id>/  — get detail (students, announcements, tasks)
+    PATCH  /api/classrooms/<id>/  — update name/type/is_locked (teacher only)
+    DELETE /api/classrooms/<id>/  — delete classroom (teacher only)
     """
     try:
         c = Classroom.objects.get(id=classroom_id)
@@ -394,37 +392,40 @@ def classroom_detail(request, classroom_id):
         return Response({'error': 'Classroom not found'}, status=404)
 
     if request.method == 'GET':
+        # include_students=True already parses announcements
         d = _classroom_data(c, include_students=True)
-        d['announcements'] = [
-            {'message': a.message, 'created_at': a.created_at.isoformat(), 'pinned': a.pinned}
-            for a in c.announcements
-        ]
+        
         # Fetch associated tasks
         req_user_id = str(request.user.id)
         is_teacher = (str(c.teacher_id) == req_user_id)
-        tasks = []
-        # Optimized: Batch fetch all tasks and their reattempt requests
+        tasks_found = []
+        
+        # Optimization: Fetch tasks
         all_tasks = CodingTask.objects.filter(id__in=c.task_ids)
         task_map = {str(t.id): t for t in all_tasks}
         
         # Batch fetch reattempt requests for current user
-        reattempts = ReattemptRequest.objects.filter(student_id=req_user_id, task_id__in=c.task_ids)
         reattempt_map = {}
-        for r in reattempts:
-            tid_str = str(r.task_id)
-            if tid_str not in reattempt_map or r.created_at > reattempt_map[tid_str].created_at:
-                reattempt_map[tid_str] = r
+        if not is_teacher:
+            reattempts = ReattemptRequest.objects.filter(student_id=req_user_id, task_id__in=c.task_ids)
+            for r in reattempts:
+                tid_str = str(r.task_id)
+                if tid_str not in reattempt_map or r.created_at > reattempt_map[tid_str].created_at:
+                    reattempt_map[tid_str] = r
 
         for tid in c.task_ids:
             t = task_map.get(str(tid))
-            if not t:
-                continue
+            if not t: continue
 
-            # If teacher, include all active submissions. If student, include only theirs.
+            # If teacher, include only ACTIVE submissions in the overview
+            # If student, include only their own.
             my_subs = []
             for s in (t.submissions or []):
-                if is_teacher or str(getattr(s, 'user_id', '')) == req_user_id:
-                    my_subs.append({
+                matches_user = (str(getattr(s, 'user_id', '')) == req_user_id)
+                should_include = (is_teacher and getattr(s, 'is_active', True)) or matches_user
+                
+                if should_include:
+                    sub_data = {
                         'user_id':        str(s.user_id),
                         'username':       getattr(s, 'username', 'Unknown'),
                         'passed':         s.passed,
@@ -436,51 +437,38 @@ def classroom_detail(request, classroom_id):
                         'remarks':        s.remarks,
                         'review_status':  getattr(s, 'review_status', 'graded'),
                         'is_active':      getattr(s, 'is_active', True),
-                        'run_results':    getattr(s, 'run_results', []),
                         'created_at':     s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
-                    })
-            
-            # Check reattempt status from map
-            reattempt_data = None
-            is_extended = False
-            r = reattempt_map.get(str(t.id))
-            if r:
-                st = r.status
-                if st == 'approved':
-                    if r.expires_at and r.expires_at > datetime.utcnow():
-                        is_extended = True
-                    else:
-                        st = 'expired'
-                reattempt_data = {'status': st, 'id': str(r.id)}
+                    }
+                    if matches_user:
+                        sub_data['run_results'] = getattr(s, 'run_results', [])
+                    
+                    my_subs.append(sub_data)
 
-            tasks.append({
+            # Check reattempt status
+            r_req = reattempt_map.get(str(t.id))
+            tasks_found.append({
                 'id': str(t.id),
                 'title': t.title,
                 'description': t.description,
-                'test_cases': [
-                    {'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden}
-                    for tc in (t.test_cases or [])
-                ],
                 'difficulty': t.difficulty,
                 'tech_stack': t.tech_stack,
                 'task_type': t.task_type,
+                'due_date': t.due_date.isoformat() if t.due_date else None,
                 'grading_mode': getattr(t, 'grading_mode', 'Percentage'),
                 'grading_type': getattr(t, 'grading_type', 'auto'),
-                'max_marks': float(getattr(t, 'max_marks', 100) or 100),
-                'pass_criteria': float(getattr(t, 'pass_criteria', 50) or 50),
-                'lab_number': getattr(t, 'lab_number', 0),
-                'linked_lab': getattr(t, 'linked_lab', 0),
-                'due_date': t.due_date.isoformat() if t.due_date else None,
-                'submissions_count': len(t.submissions or []),
-                'submissions': my_subs,
-                'reattempt': reattempt_data,
-                'is_extended': is_extended,
+                'max_marks': getattr(t, 'max_marks', 100),
+                'pass_criteria': getattr(t, 'pass_criteria', 50),
                 'content_type': getattr(t, 'content_type', 'Assignment'),
                 'text_content': getattr(t, 'text_content', ''),
                 'video_url': getattr(t, 'video_url', ''),
+                'submissions': my_subs,
+                'reattempt_request': {
+                    'status': r_req.status,
+                    'expires_at': r_req.expires_at.isoformat() if r_req.expires_at else None
+                } if r_req else None
             })
 
-        d['tasks'] = tasks
+        d['tasks'] = tasks_found
         return Response(d)
 
     if request.method == 'PATCH':
