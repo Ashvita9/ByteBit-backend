@@ -2896,3 +2896,47 @@ def exam_submissions(request, exam_id):
         sub.save()
         return Response({'message': 'Grade updated'})
 
+@api_view(['GET', 'PUT', 'DELETE', 'PATCH'])
+@permission_classes([IsTeacher])
+def exam_detail(request, exam_id):
+    """GET, PUT, PATCH, DELETE /api/exams/<id>/ — Teacher action on exam."""
+    try:
+        e = Exam.objects.get(id=exam_id)
+    except Exception:
+        return Response({'error': 'Exam not found'}, status=404)
+        
+    if str(e.teacher_id) != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+        
+    if request.method == 'GET':
+        return Response(_exam_data(e, include_sets=True, user_role='TEACHER'))
+        
+    elif request.method in ['PUT', 'PATCH']:
+        data = request.data
+        e.title = data.get('title', e.title)
+        e.description = data.get('description', e.description)
+        e.duration_minutes = int(data.get('duration_minutes', e.duration_minutes))
+        
+        if data.get('start_time'):
+            e.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
+        if data.get('end_time'):
+            e.end_time = datetime.fromisoformat(data['end_time'].replace('Z', '+00:00'))
+            
+        e.random_assignment = data.get('randomize_sets', e.random_assignment) # Field name match
+        e.allow_copy_paste = data.get('allow_copy_paste', e.allow_copy_paste)
+        e.allow_tab_completion = data.get('allow_tab_completion', e.allow_tab_completion)
+        e.fullscreen_required = data.get('require_fullscreen', e.fullscreen_required) # Field name match
+        
+        if 'sets' in data:
+            e.sets = []
+            for sd in data.get('sets', []):
+                es = ExamSet(name=sd.get('name', 'A'), question_ids=sd.get('question_ids', []))
+                e.sets.append(es)
+                
+        e.save()
+        return Response({'message': 'Exam updated successfully'})
+        
+    elif request.method == 'DELETE':
+        e.is_active = False # Soft delete
+        e.save()
+        return Response({'message': 'Exam deleted successfully'})
