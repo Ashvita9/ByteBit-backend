@@ -2688,17 +2688,20 @@ def get_exams(request, classroom_id):
 @permission_classes([permissions.IsAuthenticated])
 def start_exam_session(request, exam_id):
     try:
-        exam = Exam.objects.get(id=exam_id, is_active=True)
+        # Get the exam; ignore is_active if it's missing or set to True by default
+        exam = Exam.objects.get(id=exam_id)
+        if hasattr(exam, 'is_active') and not exam.is_active:
+             return Response({'error': 'Exam is currently disabled by teacher'}, status=403)
     except Exception:
         return Response({'error': 'Exam not found'}, status=404)
         
     now = datetime.utcnow()
-    # Handle timezone naive vs aware
-    start_time_naive = exam.start_time.replace(tzinfo=None) if exam.start_time else None
+    # 2 minute grace period for start time to account for clock drift
+    start_time_grace = (exam.start_time - timedelta(minutes=2)).replace(tzinfo=None) if exam.start_time else None
     end_time_naive = exam.end_time.replace(tzinfo=None) if exam.end_time else None
     
-    if start_time_naive and now < start_time_naive:
-        return Response({'error': 'Exam has not started yet'}, status=400)
+    if start_time_grace and now < start_time_grace:
+        return Response({'error': f'Exam has not started yet. It starts at {exam.start_time.isoformat()}'}, status=400)
     if end_time_naive and now > end_time_naive:
         return Response({'error': 'Exam has ended'}, status=400)
         
