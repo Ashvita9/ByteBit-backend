@@ -2618,6 +2618,7 @@ def create_exam(request):
         allow_copy_paste=bool(data.get('allow_copy_paste', False)),
         allow_tab_completion=bool(data.get('allow_tab_completion', False)),
         fullscreen_required=bool(data.get('require_fullscreen', data.get('fullscreen_required', True))), # Map require_fullscreen
+        primary_language=data.get('primary_language', 'Python'),
         pass_threshold_test_cases=int(data.get('pass_threshold_test_cases', 2))
     )
 
@@ -2646,6 +2647,7 @@ def _exam_data(e, include_sets=False, user_role='STUDENT', user_id=None):
         'allow_tab_completion': e.allow_tab_completion,
         'fullscreen_required': e.fullscreen_required,
         'pass_threshold_test_cases': e.pass_threshold_test_cases,
+        'primary_language': getattr(e, 'primary_language', 'Python'),
     }
     
     if include_sets or user_role in ['TEACHER', 'ADMIN']:
@@ -3087,6 +3089,7 @@ def exam_detail(request, exam_id):
         e.allow_copy_paste = data.get('allow_copy_paste', e.allow_copy_paste)
         e.allow_tab_completion = data.get('allow_tab_completion', e.allow_tab_completion)
         e.fullscreen_required = data.get('require_fullscreen', e.fullscreen_required) # Field name match
+        e.primary_language = data.get('primary_language', e.primary_language) 
         
         if 'sets' in data:
             e.sets = []
