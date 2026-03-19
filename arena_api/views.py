@@ -2744,10 +2744,13 @@ def start_exam_session(request, exam_id):
                 'questions': questions,
                 'exam': _exam_data(exam)
             })
+        elif sub.status == 'archived':
+            # A teacher has granted a re-attempt. Allow creating a fresh session.
+            sub = None
         else:
             return Response({'error': 'Exam already submitted'}, status=400)
             
-    # Start new session
+    # Start new session if no active session exists (or re-attempt granted)
     assigned_set = None
     if exam.random_assignment and len(exam.sets) > 0:
         assigned_set = random.choice(exam.sets)
@@ -2939,10 +2942,24 @@ def log_exam_violation(request, exam_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def finalize_exam(request, exam_id):
+    uid = str(request.user.id)
     try:
-        sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
-    except Exception:
-         return Response({'error': 'Active session not found'}, status=404)
+        # First, find any attempt for this student
+        sub = ExamSubmission.objects.filter(exam_id=exam_id, student_id=uid).order_by('-started_at').first()
+        
+        if not sub:
+            return Response({
+                'error': 'Active session not found',
+                'debug': f'No submission record found for Exam:{exam_id} Student:{uid}'
+            }, status=404)
+            
+        if sub.status in ['submitted', 'forced_submitted', 'malpractice']:
+            return Response({'message': 'Exam already submitted', 'already_done': True})
+            
+        if sub.status != 'in_progress':
+             return Response({'error': f'Invalid session status: {sub.status}'}, status=400)
+    except Exception as e:
+        return Response({'error': f'Database error: {str(e)}'}, status=500)
          
     data = request.data
     # Optional update of last question answers
@@ -2985,8 +3002,8 @@ def exam_submissions(request, exam_id):
         return Response({'error': 'Forbidden'}, status=403)
         
     if request.method == 'GET':
-        # Default to latest attempts first
-        subs = ExamSubmission.objects.filter(exam_id=exam_id).order_by('-started_at')
+        # Default to latest attempts first, excluding archived ones to avoid confusion during re-attempts
+        subs = ExamSubmission.objects.filter(exam_id=exam_id, status__ne='archived').order_by('-started_at')
         res = []
         for s in subs:
             res.append({
