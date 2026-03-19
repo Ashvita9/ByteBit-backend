@@ -178,6 +178,7 @@ class Exam(Document):
     classroom_id              = fields.StringField(required=True)
     teacher_id                = fields.StringField(required=True)
     duration_minutes          = fields.IntField(default=60)
+    primary_language          = fields.StringField(default='Python', choices=TECH_STACKS)
     start_time                = fields.DateTimeField(required=True)
     end_time                  = fields.DateTimeField(required=True)
     sets                      = fields.ListField(fields.EmbeddedDocumentField(ExamSet), default=[])
