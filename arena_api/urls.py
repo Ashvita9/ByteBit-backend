@@ -106,5 +106,6 @@ urlpatterns = [
     path('exams/<str:exam_id>/violation/',        views.log_exam_violation,        name='log-exam-violation'),
     path('exams/<str:exam_id>/finalize/',         views.finalize_exam,             name='finalize-exam'),
     path('exams/<str:exam_id>/submissions/',      views.exam_submissions,          name='exam-submissions'),
+    path('exams/<str:exam_id>/submissions/reattempt/', views.grant_exam_reattempt,    name='grant-exam-reattempt'),
     path('exams/<str:exam_id>/',                  views.exam_detail,               name='exam-detail'),
 ]

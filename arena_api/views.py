@@ -2985,7 +2985,8 @@ def exam_submissions(request, exam_id):
         return Response({'error': 'Forbidden'}, status=403)
         
     if request.method == 'GET':
-        subs = ExamSubmission.objects.filter(exam_id=exam_id)
+        # Default to latest attempts first
+        subs = ExamSubmission.objects.filter(exam_id=exam_id).order_by('-started_at')
         res = []
         for s in subs:
             res.append({
@@ -3017,6 +3018,19 @@ def exam_submissions(request, exam_id):
              
         sub.save()
         return Response({'message': 'Grade updated'})
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def grant_exam_reattempt(request, exam_id):
+    """Archives a submission so the student can start a new session."""
+    sub_id = request.data.get('submission_id')
+    try:
+        sub = ExamSubmission.objects.get(id=sub_id, exam_id=exam_id)
+        sub.status = 'archived'
+        sub.save()
+        return Response({'message': 'Re-attempt granted. User can now start a new session.'})
+    except Exception as e:
+        return Response({'error': str(e)}, status=404)
 
 @api_view(['GET', 'PUT', 'DELETE', 'PATCH'])
 @permission_classes([IsTeacher])
