@@ -18,7 +18,7 @@ from .models import (
     Submission, Classroom, Announcement, Ticket, ActionLog,
     GlobalAnnouncement, UserNotification, FriendRequest,
     Tournament, TournamentQuestion, TournamentMatch, gen_code,
-    ReattemptRequest,
+    ReattemptRequest, Exam, ExamSet, ExamViolation, ExamSubmission,
 )
 from .serializers import (
     CodingTaskSerializer,
@@ -2552,3 +2552,347 @@ def get_leaderboard(request):
         })
         
     return Response(leaderboard)
+
+# ── Exams ──────────────────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsTeacher])
+def create_exam(request):
+    data = request.data
+    classroom_id = data.get('classroom_id')
+    try:
+        c = Classroom.objects.get(id=classroom_id)
+    except Exception:
+        return Response({'error': 'Classroom not found'}, status=404)
+        
+    if str(c.teacher_id) != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+
+    exam = Exam(
+        title=data.get('title'),
+        description=data.get('description', ''),
+        classroom_id=classroom_id,
+        teacher_id=str(request.user.id),
+        duration_minutes=int(data.get('duration_minutes', 60)),
+        start_time=datetime.fromisoformat(data.get('start_time').replace('Z', '+00:00')),
+        end_time=datetime.fromisoformat(data.get('end_time').replace('Z', '+00:00')),
+        random_assignment=bool(data.get('random_assignment', True)),
+        allow_copy_paste=bool(data.get('allow_copy_paste', False)),
+        allow_tab_completion=bool(data.get('allow_tab_completion', False)),
+        fullscreen_required=bool(data.get('fullscreen_required', True)),
+        pass_threshold_test_cases=int(data.get('pass_threshold_test_cases', 2))
+    )
+    
+    sets_data = data.get('sets', [])
+    for sd in sets_data:
+        es = ExamSet(name=sd.get('name', 'A'), question_ids=sd.get('question_ids', []))
+        exam.sets.append(es)
+
+    exam.save()
+    return Response({'message': 'Exam created successfully', 'id': str(exam.id)}, status=201)
+
+def _exam_data(e, include_sets=False, user_role='STUDENT', user_id=None):
+    data = {
+        'id': str(e.id),
+        'title': e.title,
+        'description': e.description,
+        'classroom_id': e.classroom_id,
+        'teacher_id': e.teacher_id,
+        'duration_minutes': e.duration_minutes,
+        'start_time': e.start_time.isoformat() if e.start_time else None,
+        'end_time': e.end_time.isoformat() if e.end_time else None,
+        'allow_copy_paste': e.allow_copy_paste,
+        'allow_tab_completion': e.allow_tab_completion,
+        'fullscreen_required': e.fullscreen_required,
+        'pass_threshold_test_cases': e.pass_threshold_test_cases,
+    }
+    
+    if include_sets or user_role in ['TEACHER', 'ADMIN']:
+        data['sets'] = [{'name': s.name, 'question_ids': s.question_ids} for s in e.sets]
+        
+    # include submission status if requested for student
+    if user_role == 'STUDENT' and user_id:
+        sub = ExamSubmission.objects.filter(exam_id=str(e.id), student_id=str(user_id)).order_by('-started_at').first()
+        if sub:
+            data['submission_status'] = sub.status
+            data['warnings_left'] = sub.warnings_left
+            if sub.status == 'in_progress':
+                # Check if time is up
+                elapsed = (datetime.utcnow() - sub.started_at).total_seconds() / 60
+                if elapsed > getattr(e, 'duration_minutes', 60) or datetime.utcnow() > e.end_time:
+                    data['submission_status'] = 'expired'
+            
+    return data
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_exams(request, classroom_id):
+    try:
+        c = Classroom.objects.get(id=classroom_id)
+    except Exception:
+        return Response({'error': 'Classroom not found'}, status=404)
+    
+    exams = Exam.objects.filter(classroom_id=classroom_id, is_active=True)
+    
+    profile = CoderProfile.objects.filter(user_id=str(request.user.id)).first()
+    role = profile.role if profile else 'STUDENT'
+    
+    res = []
+    for e in exams:
+        res.append(_exam_data(e, user_role=role, user_id=str(request.user.id)))
+        
+    return Response(res)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def start_exam_session(request, exam_id):
+    try:
+        exam = Exam.objects.get(id=exam_id, is_active=True)
+    except Exception:
+        return Response({'error': 'Exam not found'}, status=404)
+        
+    now = datetime.utcnow()
+    # Handle timezone naive vs aware
+    start_time_naive = exam.start_time.replace(tzinfo=None) if exam.start_time else None
+    end_time_naive = exam.end_time.replace(tzinfo=None) if exam.end_time else None
+    
+    if start_time_naive and now < start_time_naive:
+        return Response({'error': 'Exam has not started yet'}, status=400)
+    if end_time_naive and now > end_time_naive:
+        return Response({'error': 'Exam has ended'}, status=400)
+        
+    uid = str(request.user.id)
+    # Check existing
+    sub = ExamSubmission.objects.filter(exam_id=exam_id, student_id=uid).order_by('-started_at').first()
+    if sub:
+        if sub.status == 'in_progress':
+            # return existing session info
+            elapsed = (now - sub.started_at).total_seconds() / 60
+            if elapsed > getattr(exam, 'duration_minutes', 60):
+                sub.status = 'forced_submitted'
+                sub.submitted_at = now
+                sub.save()
+                return Response({'error': 'Exam time expired'}, status=400)
+                
+            # fetch questions for the assigned set
+            questions = []
+            assigned_set = next((s for s in exam.sets if s.name == sub.set_id), None)
+            if assigned_set:
+                for qid in assigned_set.question_ids:
+                    try:
+                        q = CodingTask.objects.get(id=qid)
+                        questions.append({
+                            'id': str(q.id),
+                            'title': q.title,
+                            'description': q.description,
+                            'test_cases': [{'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden} for tc in q.test_cases]
+                        })
+                    except Exception:
+                        pass
+                        
+            return Response({
+                'message': 'Resumed existing session',
+                'submission_id': str(sub.id),
+                'set_id': sub.set_id,
+                'warnings_left': sub.warnings_left,
+                'answers': sub.answers,
+                'start_time': sub.started_at.isoformat(),
+                'questions': questions,
+                'exam': _exam_data(exam)
+            })
+        else:
+            return Response({'error': 'Exam already submitted'}, status=400)
+            
+    # Start new session
+    assigned_set = None
+    if exam.random_assignment and len(exam.sets) > 0:
+        assigned_set = random.choice(exam.sets)
+    elif len(exam.sets) > 0:
+        assigned_set = exam.sets[0]
+        
+    if not assigned_set:
+         return Response({'error': 'Exam has no question sets'}, status=400)
+         
+    sub = ExamSubmission(
+        exam_id=str(exam.id),
+        student_id=uid,
+        student_username=request.user.username,
+        set_id=assigned_set.name,
+        answers={},
+        warnings_left=3,
+        status='in_progress',
+        started_at=now
+    )
+    sub.save()
+    
+    questions = []
+    for qid in assigned_set.question_ids:
+        try:
+            q = CodingTask.objects.get(id=qid)
+            questions.append({
+                'id': str(q.id),
+                'title': q.title,
+                'description': q.description,
+                'test_cases': [{'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden} for tc in q.test_cases]
+            })
+        except Exception:
+            pass
+            
+            
+    return Response({
+        'message': 'Session started',
+        'submission_id': str(sub.id),
+        'set_id': sub.set_id,
+        'warnings_left': sub.warnings_left,
+        'answers': {},
+        'start_time': sub.started_at.isoformat(),
+        'questions': questions,
+        'exam': _exam_data(exam)
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def submit_exam_question(request, exam_id):
+    """Saves code for a single question."""
+    try:
+        sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
+    except Exception:
+        return Response({'error': 'Active session not found'}, status=404)
+        
+    exam = Exam.objects.get(id=exam_id)
+    now = datetime.utcnow()
+    elapsed = (now - sub.started_at).total_seconds() / 60
+    end_time_naive = exam.end_time.replace(tzinfo=None) if exam.end_time else None
+
+    if elapsed > getattr(exam, 'duration_minutes', 60) or (end_time_naive and now > end_time_naive):
+         sub.status = 'forced_submitted'
+         sub.submitted_at = now
+         sub.save()
+         return Response({'error': 'Exam time expired'}, status=400)
+
+    data = request.data
+    q_id = data.get('question_id')
+    code = data.get('code')
+    language = data.get('language')
+    passed_count = data.get('passed_count', 0)
+    total_cases = data.get('total_test_cases', 0)
+    
+    if not q_id:
+        return Response({'error': 'question_id is required'}, status=400)
+        
+    sub.answers[str(q_id)] = {
+        'code': code,
+        'language': language,
+        'passed_count': passed_count,
+        'total_test_cases': total_cases,
+        'status': 'saved'
+    }
+    sub.save()
+    return Response({'message': 'Progress saved'})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def log_exam_violation(request, exam_id):
+    try:
+        sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
+    except Exception:
+        return Response({'error': 'Active session not found'}, status=404)
+        
+    vtype = request.data.get('type')
+    if vtype not in ['tab_switch', 'fullscreen_exit']:
+        return Response({'error': 'Invalid violation type'}, status=400)
+        
+    sub.violations.append(ExamViolation(type=vtype, timestamp=datetime.utcnow()))
+    sub.warnings_left -= 1
+    
+    if sub.warnings_left <= 0:
+        sub.status = 'forced_submitted'
+        sub.submitted_at = datetime.utcnow()
+        sub.save()
+        return Response({'message': 'Forced submission due to violations', 'forced': True}, status=403)
+        
+    sub.save()
+    return Response({'warnings_left': sub.warnings_left, 'forced': False})
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def finalize_exam(request, exam_id):
+    try:
+        sub = ExamSubmission.objects.get(exam_id=exam_id, student_id=str(request.user.id), status='in_progress')
+    except Exception:
+         return Response({'error': 'Active session not found'}, status=404)
+         
+    data = request.data
+    # Optional update of last question answers
+    q_id = data.get('question_id')
+    if q_id:
+        sub.answers[str(q_id)] = {
+            'code': data.get('code'),
+            'language': data.get('language'),
+            'passed_count': data.get('passed_count', 0),
+            'total_test_cases': data.get('total_test_cases', 0),
+            'status': 'submitted'
+        }
+        
+    sub.status = 'submitted'
+    sub.submitted_at = datetime.utcnow()
+    sub.manual_evaluation_needed = True # flag for teacher
+    
+    # Calculate simple total marks (percentage of tests passed out of total)
+    total_tests = 0
+    passed = 0
+    for qid, ans in sub.answers.items():
+        total_tests += ans.get('total_test_cases', 0)
+        passed += ans.get('passed_count', 0)
+        
+    if total_tests > 0:
+        sub.total_marks = round((passed / total_tests) * 100, 2)
+        
+    sub.save()
+    return Response({'message': 'Exam submitted successfully'})
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsTeacher])
+def exam_submissions(request, exam_id):
+    try:
+        exam = Exam.objects.get(id=exam_id)
+    except Exception:
+        return Response({'error': 'Exam not found'}, status=404)
+        
+    if str(exam.teacher_id) != str(request.user.id):
+        return Response({'error': 'Forbidden'}, status=403)
+        
+    if request.method == 'GET':
+        subs = ExamSubmission.objects.filter(exam_id=exam_id)
+        res = []
+        for s in subs:
+            res.append({
+                'id': str(s.id),
+                'student_id': s.student_id,
+                'student_username': s.student_username,
+                'set_id': s.set_id,
+                'answers': s.answers,
+                'violations': [{'type': v.type, 'timestamp': v.timestamp.isoformat()} for v in s.violations],
+                'warnings_left': s.warnings_left,
+                'status': s.status,
+                'total_marks': s.total_marks,
+                'manual_evaluation_needed': s.manual_evaluation_needed,
+                'started_at': s.started_at.isoformat() if s.started_at else None,
+                'submitted_at': s.submitted_at.isoformat() if s.submitted_at else None,
+            })
+        return Response(res)
+        
+    elif request.method == 'PATCH':
+        sub_id = request.data.get('submission_id')
+        try:
+             sub = ExamSubmission.objects.get(id=sub_id, exam_id=exam_id)
+        except Exception:
+             return Response({'error': 'Submission not found'}, status=404)
+             
+        if 'total_marks' in request.data:
+             sub.total_marks = float(request.data['total_marks'])
+             sub.manual_evaluation_needed = False
+             
+        sub.save()
+        return Response({'message': 'Grade updated'})
+

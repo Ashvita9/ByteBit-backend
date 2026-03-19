@@ -97,4 +97,13 @@ urlpatterns = [
     path('request-reattempt/',                    views.request_reattempt,         name='request-reattempt'),
     path('reattempt-requests/',                   views.get_reattempt_requests,    name='reattempt-requests'),
     path('approve-reattempt/',                    views.approve_reattempt,         name='approve-reattempt'),
+
+    # Exams
+    path('exams/',                                views.create_exam,               name='create-exam'),
+    path('classrooms/<str:classroom_id>/exams/',  views.get_exams,                 name='get-exams'),
+    path('exams/<str:exam_id>/start/',            views.start_exam_session,        name='start-exam-session'),
+    path('exams/<str:exam_id>/submit-question/',  views.submit_exam_question,      name='submit-exam-question'),
+    path('exams/<str:exam_id>/violation/',        views.log_exam_violation,        name='log-exam-violation'),
+    path('exams/<str:exam_id>/finalize/',         views.finalize_exam,             name='finalize-exam'),
+    path('exams/<str:exam_id>/submissions/',      views.exam_submissions,          name='exam-submissions'),
 ]

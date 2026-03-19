@@ -165,8 +165,61 @@ class Classroom(Document):
 
     meta = {'collection': 'classrooms', 'ordering': ['-created_at']}
 
+# ── Exam Module ───────────────────────────────────────────────────────────────
+
+class ExamSet(EmbeddedDocument):
+    name         = fields.StringField(required=True) # Set A, Set B, etc.
+    question_ids = fields.ListField(fields.StringField(), default=[])
+
+
+class Exam(Document):
+    title                     = fields.StringField(max_length=200, required=True)
+    description               = fields.StringField(default='')
+    classroom_id              = fields.StringField(required=True)
+    teacher_id                = fields.StringField(required=True)
+    duration_minutes          = fields.IntField(default=60)
+    start_time                = fields.DateTimeField(required=True)
+    end_time                  = fields.DateTimeField(required=True)
+    sets                      = fields.ListField(fields.EmbeddedDocumentField(ExamSet), default=[])
+    random_assignment         = fields.BooleanField(default=True)
+    allow_copy_paste          = fields.BooleanField(default=False)
+    allow_tab_completion      = fields.BooleanField(default=False)
+    fullscreen_required       = fields.BooleanField(default=True)
+    pass_threshold_test_cases = fields.IntField(default=2) # e.g. 2/3
+    is_active                 = fields.BooleanField(default=True)
+    created_at                = fields.DateTimeField(default=datetime.utcnow)
+
+    meta = {'collection': 'exams', 'ordering': ['-created_at']}
+
     def __str__(self):
-        return self.name
+        return self.title
+
+
+class ExamViolation(EmbeddedDocument):
+    type      = fields.StringField(choices=['tab_switch', 'fullscreen_exit'])
+    timestamp = fields.DateTimeField(default=datetime.utcnow)
+
+
+class ExamSubmission(Document):
+    exam_id           = fields.StringField(required=True)
+    student_id        = fields.StringField(required=True)
+    student_username  = fields.StringField(default='')
+    set_id            = fields.StringField(required=True) # The assigned ExamSet ID or name
+    # question_id -> {code, language, passed_count, total_test_cases, status}
+    answers           = fields.DictField(default={})
+    violations        = fields.ListField(fields.EmbeddedDocumentField(ExamViolation), default=[])
+    warnings_left     = fields.IntField(default=3)
+    # status: in_progress, submitted, forced_submitted
+    status            = fields.StringField(default='in_progress')
+    total_marks       = fields.FloatField(default=0.0)
+    manual_evaluation_needed = fields.BooleanField(default=False)
+    started_at        = fields.DateTimeField(default=datetime.utcnow)
+    submitted_at      = fields.DateTimeField(null=True)
+
+    meta = {'collection': 'exam_submissions', 'ordering': ['-submitted_at']}
+
+    def __str__(self):
+        return f"{self.student_username} - {self.exam_id}"
 
 
 # ── Global Announcements / Broadcasts ──────────────────────────────────────────
