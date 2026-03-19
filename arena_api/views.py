@@ -113,6 +113,48 @@ class CodingTaskViewSet(viewsets.ModelViewSet):
                 pass
 
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def mark_task_complete(request, task_id):
+    try:
+        task = CodingTask.objects.get(id=task_id)
+        if task.content_type == 'Assignment':
+            return Response({'error': 'Cannot auto-complete Assignments.'}, status=400)
+            
+        profile = CoderProfile.objects.get(user_id=str(request.user.id))
+        
+        # Check if already completed
+        existing = [s for s in task.submissions if s.user_id == str(request.user.id) and s.passed]
+        if existing:
+            return Response({'message': 'Already completed'})
+            
+        # Create a dummy submission
+        sub = Submission(
+            user_id=str(request.user.id),
+            username=request.user.username,
+            code="# Marked as complete automatically\n",
+            passed=True,
+            score=100.0,
+            marks_obtained=task.max_marks,
+            status='Submitted',
+            review_status='graded'
+        )
+        task.submissions.append(sub)
+        task.save()
+        
+        # Add XP
+        xp_gain = 20 if task.difficulty == 'Easy' else 50 if task.difficulty == 'Medium' else 100
+        profile.xp += xp_gain
+        profile.recalc_rank()
+        profile.save()
+        
+        return Response({'message': 'Content marked as complete', 'xp_gained': xp_gain})
+    except CodingTask.DoesNotExist:
+        return Response({'error': 'Task not found'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
 
 # â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -407,6 +449,9 @@ def classroom_detail(request, classroom_id):
                     'submissions': my_subs,
                     'reattempt': reattempt_data,
                     'is_extended': is_extended,
+                    'content_type': getattr(t, 'content_type', 'Assignment') or 'Assignment',
+                    'text_content': getattr(t, 'text_content', '') or '',
+                    'video_url': getattr(t, 'video_url', '') or '',
                 })
             except Exception:
                 pass
@@ -1909,6 +1954,7 @@ def _tournament_data(t):
         'allowCopyPaste':      getattr(t, 'allow_copy_paste', True),
         'allowTabCompletion':  getattr(t, 'allow_tab_completion', True),
         'isLocked':            t.is_locked,
+        'isGlobal':            getattr(t, 'is_global', False),
         'createdAt':           to_iso(t.created_at),
     }
 
@@ -2003,6 +2049,15 @@ def create_tournament(request):
 
     # Optional ISO start_time
     start_time_str = request.data.get('startTime', None)
+    is_global      = request.data.get('isGlobal', False)
+    
+    # Permission check for global
+    profile = CoderProfile.objects.filter(user_id=str(request.user.id)).first()
+    is_admin = request.user.is_superuser or (profile and profile.role == 'ADMIN')
+    
+    if is_global and not is_admin:
+        return Response({'error': 'Only admins can create global tournaments'}, status=403)
+
     start_time = None
     if start_time_str:
         try:
@@ -2069,6 +2124,7 @@ def create_tournament(request):
         tech_stack=tech_stack,
         allow_copy_paste=allow_copy_paste,
         allow_tab_completion=allow_tab_completion,
+        is_global=is_global,
     )
     t.save()
     return Response(_tournament_data(t), status=201)
@@ -2088,6 +2144,14 @@ def joined_tournaments(request):
     """GET /api/tournaments/joined/ — student's joined tournaments."""
     uid = str(request.user.id)
     ts = Tournament.objects.filter(participant_ids=uid)
+    return Response([_tournament_data(t) for t in ts])
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def public_tournaments(request):
+    """GET /api/tournaments/public/ — list active global tournaments for discovery."""
+    ts = Tournament.objects.filter(is_global=True, status='waiting')
     return Response([_tournament_data(t) for t in ts])
 
 def _try_auto_start_tournament(t):
@@ -2222,12 +2286,21 @@ def remove_tournament_question(request, tournament_id, q_idx):
 def join_tournament(request):
     """POST /api/tournaments/join/ — student joins with {code}."""
     code = request.data.get('code', '').strip().upper()
-    if not code:
-        return Response({'error': 'code required'}, status=400)
-    try:
-        t = Tournament.objects.get(code=code)
-    except Exception:
-        return Response({'error': 'Tournament not found'}, status=404)
+    tournament_id = request.data.get('tournament_id')
+    
+    t = None
+    if tournament_id:
+        try:
+            t = Tournament.objects.get(id=tournament_id)
+        except:
+            return Response({'error': 'Tournament not found'}, status=404)
+    elif code:
+        try:
+            t = Tournament.objects.get(code=code)
+        except Exception:
+            return Response({'error': 'Tournament not found'}, status=404)
+    else:
+        return Response({'error': 'Tournament ID or code required'}, status=400)
 
     if t.status != 'waiting':
         return Response({'error': 'Tournament has already started'}, status=400)

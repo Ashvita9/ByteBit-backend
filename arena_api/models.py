@@ -96,6 +96,9 @@ class CodingTask(Document):
     due_date      = fields.DateTimeField(required=False)
     task_type     = fields.StringField(choices=["Mandatory", "CP"], default="Mandatory")
     classroom_id  = fields.StringField(required=False)
+    content_type  = fields.StringField(choices=["Assignment", "Text", "Video", "VideoText"], default="Assignment")
+    text_content  = fields.StringField(default="")
+    video_url     = fields.StringField(default="")
     is_final      = fields.BooleanField(default=False)
     # Lab sequencing: Mandatory tasks get a lab_number (1,2,3...) for sequential unlock
     lab_number    = fields.IntField(default=0)  # 0 = unassigned, 1+ = lab sequence
@@ -330,6 +333,7 @@ class Tournament(Document):
     allow_tab_completion = fields.BooleanField(default=True)
 
     is_locked            = fields.BooleanField(default=False)
+    is_global            = fields.BooleanField(default=False)
     created_at           = fields.DateTimeField(default=datetime.utcnow)
 
     meta = {'collection': 'tournaments', 'ordering': ['-created_at']}

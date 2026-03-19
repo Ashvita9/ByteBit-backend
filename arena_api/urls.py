@@ -51,6 +51,7 @@ urlpatterns = [
     path('tasks/<str:task_id>/run/',         views.run_code,           name='run-code'),
     path('tasks/<str:task_id>/submit/',      views.record_submission,  name='record-submission'),
     path('tasks/<str:task_id>/unsubmit/',    views.unsubmit,           name='unsubmit'),
+    path('tasks/<str:task_id>/mark-complete/', views.mark_task_complete, name='mark-task-complete'),
 
     # Admin
     path('admin/users/',                          views.admin_users,            name='admin-users'),
@@ -81,6 +82,7 @@ urlpatterns = [
     # Tournaments
     path('tournaments/',                                                      views.create_tournament,         name='tournament-create'),
     path('tournaments/my/',                                                   views.my_tournaments,            name='tournament-my'),
+    path('tournaments/public/',                                               views.public_tournaments,        name='tournament-public'),
     path('tournaments/joined/',                                               views.joined_tournaments,        name='tournament-joined'),
     path('tournaments/join/',                                                 views.join_tournament,           name='tournament-join'),
     path('tournaments/<str:tournament_id>/',                                  views.tournament_detail,         name='tournament-detail'),
