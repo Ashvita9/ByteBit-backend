@@ -325,13 +325,18 @@ def _classroom_data(c, include_students=False):
         ],
     }
     if include_students:
-        # Optimized: Batch fetch all students in one query
-        student_users = User.objects.filter(id__in=c.student_ids).only('id', 'username')
+        # Optimization: Safe integer conversion for Django User lookup
+        def to_int(v):
+            try: return int(v)
+            except: return None
+            
+        uids = [to_int(uid) for uid in (c.student_ids or []) if to_int(uid) is not None]
+        student_users = User.objects.filter(id__in=uids).only('id', 'username')
         student_map = {str(u.id): u.username for u in student_users}
         
         d['students'] = [
-            {'id': uid, 'username': student_map.get(str(uid), 'Unknown User')}
-            for uid in c.student_ids
+            {'id': str(uid), 'username': student_map.get(str(uid), 'Unknown User')}
+            for uid in (c.student_ids or [])
         ]
     return d
 
@@ -347,12 +352,17 @@ def classrooms(request):
     if request.method == 'GET':
         cs = Classroom.objects.filter(teacher_id=uid)
         
-        # Optimization: Pre-fetch all student usernames for these classrooms
+        # Optimization: Pre-fetch student usernames safely
         all_student_ids = set()
         for c in cs:
-            all_student_ids.update(c.student_ids)
-        
-        student_users = User.objects.filter(id__in=list(all_student_ids)).only('id', 'username')
+            all_student_ids.update(c.student_ids or [])
+            
+        def to_int(v):
+            try: return int(v)
+            except: return None
+            
+        uids = [to_int(sid) for sid in all_student_ids if to_int(sid) is not None]
+        student_users = User.objects.filter(id__in=uids).only('id', 'username')
         student_map = {str(u.id): u.username for u in student_users}
         
         results = []
@@ -360,7 +370,7 @@ def classrooms(request):
             data = _classroom_data(c, include_students=False)
             data['students'] = [
                 {'id': str(sid), 'username': student_map.get(str(sid), 'Unknown')}
-                for sid in c.student_ids
+                for sid in (c.student_ids or [])
             ]
             results.append(data)
         return Response(results)
