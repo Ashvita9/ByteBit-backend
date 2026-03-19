@@ -2873,13 +2873,20 @@ def log_exam_violation(request, exam_id):
         # Notify teacher of forced expulsion
         try:
             exam = Exam.objects.get(id=exam_id)
+            
+            # Tally all violations for the teacher report
+            from collections import Counter
+            tally = Counter([v.type for v in sub.violations])
+            tally_str = ", ".join([f"{count}x {VIOLATION_LABELS.get(k, k)}" for k, count in tally.items()])
+            
             UserNotification(
                 user_id=exam.teacher_id,
                 title='🚨 MALPRACTICE ALERT — Student Expelled',
                 message=(
-                    f'{sub.student_username} was automatically expelled from '
-                    f'"{exam.title}" after exceeding the maximum violation limit. '
-                    f'Final violation: {label}. Exam submission has been locked and flagged.'
+                    f'{sub.student_username} was automatically expelled from "{exam.title}" '
+                    f'after exceeding the maximum violation limit.\n'
+                    f'Violation History: {tally_str}.\n'
+                    f'Final trigger: {label}. Exam submission has been locked.'
                 ),
                 notif_type='general',
                 extra_id=str(sub.id),
