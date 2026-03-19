@@ -325,14 +325,14 @@ def _classroom_data(c, include_students=False):
         ],
     }
     if include_students:
-        students = []
-        for uid in c.student_ids:
-            try:
-                u = User.objects.get(id=uid)
-                students.append({'id': uid, 'username': u.username})
-            except Exception:
-                students.append({'id': uid, 'username': '???'})
-        d['students'] = students
+        # Optimized: Batch fetch all students in one query
+        student_users = User.objects.filter(id__in=c.student_ids).only('id', 'username')
+        student_map = {str(u.id): u.username for u in student_users}
+        
+        d['students'] = [
+            {'id': uid, 'username': student_map.get(str(uid), 'Unknown User')}
+            for uid in c.student_ids
+        ]
     return d
 
 
@@ -345,8 +345,27 @@ def classrooms(request):
     POST /api/classrooms/      â€” create a new classroom
     """
     if request.method == 'GET':
-        cs = Classroom.objects.filter(teacher_id=str(request.user.id))
-        return Response([_classroom_data(c) for c in cs])
+        cs = list(Classroom.objects.filter(teacher_id=str(request.user.id)))
+        
+        # Pre-fetch all students for all these classrooms in ONE query
+        all_student_ids = set()
+        for c in cs:
+            all_student_ids.update(c.student_ids)
+        
+        student_users = User.objects.filter(id__in=list(all_student_ids)).only('id', 'username')
+        student_map = {str(u.id): u.username for u in student_users}
+        
+        results = []
+        for c in cs:
+            # We use include_students=False then manually inject, or update _classroom_data
+            data = _classroom_data(c, include_students=False)
+            data['students'] = [
+                {'id': str(uid), 'username': student_map.get(str(uid), 'Unknown User')}
+                for uid in c.student_ids
+            ]
+            results.append(data)
+            
+        return Response(results)
 
     # POST â€” create
     name = request.data.get('name', '').strip()
@@ -384,77 +403,83 @@ def classroom_detail(request, classroom_id):
         req_user_id = str(request.user.id)
         is_teacher = (str(c.teacher_id) == req_user_id)
         tasks = []
-        for tid in c.task_ids:
-            try:
-                t = CodingTask.objects.get(id=tid)
-                # If teacher, include all active submissions. If student, include only theirs.
-                my_subs = []
-                for s in (t.submissions or []):
-                    # For teacher: include all active submissions
-                    # For student: include all of their own submissions
-                    if is_teacher or str(getattr(s, 'user_id', '')) == req_user_id:
-                        # Only include active submissions in the listing unless it's the specific user looking at history
-                        # Actually, dashboard logic filters by is_active, so let's send them.
-                        my_subs.append({
-                            'user_id':        str(s.user_id),
-                            'username':       getattr(s, 'username', 'Unknown'),
-                            'passed':         s.passed,
-                            'code':           getattr(s, 'code', ''),
-                            'language':       getattr(s, 'language', ''),
-                            'score':          s.score,
-                            'marks_obtained': s.marks_obtained,
-                            'grade':          s.grade,
-                            'remarks':        s.remarks,
-                            'review_status':  getattr(s, 'review_status', 'graded'),
-                            'is_active':      getattr(s, 'is_active', True),
-                            'run_results':    getattr(s, 'run_results', []), # Added
-                            'created_at':     s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
-                        })
-                
-                # Check reattempt status for this user
-                reattempt_data = None
-                is_extended = False
-                try:
-                    # student_id is req_user_id
-                    r = ReattemptRequest.objects.filter(student_id=req_user_id, task_id=str(t.id)).order_by('-created_at').first()
-                    if r:
-                        st = r.status
-                        if st == 'approved':
-                            if r.expires_at and r.expires_at > datetime.utcnow():
-                                is_extended = True
-                            else:
-                                st = 'expired'
-                        reattempt_data = {'status': st, 'id': str(r.id)}
-                except: pass
+        # Optimized: Batch fetch all tasks and their reattempt requests
+        all_tasks = CodingTask.objects.filter(id__in=c.task_ids)
+        task_map = {str(t.id): t for t in all_tasks}
+        
+        # Batch fetch reattempt requests for current user
+        reattempts = ReattemptRequest.objects.filter(student_id=req_user_id, task_id__in=c.task_ids)
+        reattempt_map = {}
+        for r in reattempts:
+            tid_str = str(r.task_id)
+            if tid_str not in reattempt_map or r.created_at > reattempt_map[tid_str].created_at:
+                reattempt_map[tid_str] = r
 
-                tasks.append({
-                    'id': str(t.id),
-                    'title': t.title,
-                    'description': t.description,  # Added
-                    'test_cases': [
-                        {'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden}
-                        for tc in t.test_cases
-                    ], # Added
-                    'difficulty': t.difficulty,
-                    'tech_stack': t.tech_stack,
-                    'task_type': t.task_type,
-                    'grading_mode': getattr(t, 'grading_mode', 'Percentage'),
-                    'grading_type': getattr(t, 'grading_type', 'auto') or 'auto',
-                    'max_marks': float(getattr(t, 'max_marks', 100) or 100),
-                    'pass_criteria': float(getattr(t, 'pass_criteria', 50) or 50),
-                    'lab_number': getattr(t, 'lab_number', 0) or 0,
-                    'linked_lab': getattr(t, 'linked_lab', 0) or 0,
-                    'due_date': t.due_date.isoformat() if t.due_date else None,
-                    'submissions_count': len(t.submissions or []),
-                    'submissions': my_subs,
-                    'reattempt': reattempt_data,
-                    'is_extended': is_extended,
-                    'content_type': getattr(t, 'content_type', 'Assignment') or 'Assignment',
-                    'text_content': getattr(t, 'text_content', '') or '',
-                    'video_url': getattr(t, 'video_url', '') or '',
-                })
-            except Exception:
-                pass
+        for tid in c.task_ids:
+            t = task_map.get(str(tid))
+            if not t:
+                continue
+
+            # If teacher, include all active submissions. If student, include only theirs.
+            my_subs = []
+            for s in (t.submissions or []):
+                if is_teacher or str(getattr(s, 'user_id', '')) == req_user_id:
+                    my_subs.append({
+                        'user_id':        str(s.user_id),
+                        'username':       getattr(s, 'username', 'Unknown'),
+                        'passed':         s.passed,
+                        'code':           getattr(s, 'code', ''),
+                        'language':       getattr(s, 'language', ''),
+                        'score':          s.score,
+                        'marks_obtained': s.marks_obtained,
+                        'grade':          s.grade,
+                        'remarks':        s.remarks,
+                        'review_status':  getattr(s, 'review_status', 'graded'),
+                        'is_active':      getattr(s, 'is_active', True),
+                        'run_results':    getattr(s, 'run_results', []),
+                        'created_at':     s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
+                    })
+            
+            # Check reattempt status from map
+            reattempt_data = None
+            is_extended = False
+            r = reattempt_map.get(str(t.id))
+            if r:
+                st = r.status
+                if st == 'approved':
+                    if r.expires_at and r.expires_at > datetime.utcnow():
+                        is_extended = True
+                    else:
+                        st = 'expired'
+                reattempt_data = {'status': st, 'id': str(r.id)}
+
+            tasks.append({
+                'id': str(t.id),
+                'title': t.title,
+                'description': t.description,
+                'test_cases': [
+                    {'input_data': tc.input_data, 'output_data': tc.output_data, 'is_hidden': tc.is_hidden}
+                    for tc in (t.test_cases or [])
+                ],
+                'difficulty': t.difficulty,
+                'tech_stack': t.tech_stack,
+                'task_type': t.task_type,
+                'grading_mode': getattr(t, 'grading_mode', 'Percentage'),
+                'grading_type': getattr(t, 'grading_type', 'auto'),
+                'max_marks': float(getattr(t, 'max_marks', 100) or 100),
+                'pass_criteria': float(getattr(t, 'pass_criteria', 50) or 50),
+                'lab_number': getattr(t, 'lab_number', 0),
+                'linked_lab': getattr(t, 'linked_lab', 0),
+                'due_date': t.due_date.isoformat() if t.due_date else None,
+                'submissions_count': len(t.submissions or []),
+                'submissions': my_subs,
+                'reattempt': reattempt_data,
+                'is_extended': is_extended,
+                'content_type': getattr(t, 'content_type', 'Assignment'),
+                'text_content': getattr(t, 'text_content', ''),
+                'video_url': getattr(t, 'video_url', ''),
+            })
+
         d['tasks'] = tasks
         return Response(d)
 
@@ -1351,13 +1376,19 @@ def friends_list(request):
         profile = CoderProfile.objects.get(user_id=str(request.user.id))
     except CoderProfile.DoesNotExist:
         return Response([])
+    friend_ids = profile.friends or []
+    if not friend_ids:
+        return Response([])
+
+    # Batch fetch all usernames in one query
+    users = User.objects.filter(id__in=friend_ids).only('id', 'username')
+    username_map = {str(u.id): u.username for u in users}
+
     result = []
-    for uid in (profile.friends or []):
-        try:
-            u = User.objects.get(id=uid)
-            result.append({'id': uid, 'username': u.username})
-        except User.DoesNotExist:
-            pass
+    for uid in friend_ids:
+        uid_str = str(uid)
+        if uid_str in username_map:
+            result.append({'id': uid_str, 'username': username_map[uid_str]})
     return Response(result)
 
 
@@ -1483,14 +1514,16 @@ def admin_classrooms(request):
         d['teacher_name'] = request.user.username
         return Response(d, status=201)
 
+    # Optimization: pre-fetch all teacher usernames
+    classrooms = list(Classroom.objects.all())
+    teacher_ids = {str(c.teacher_id) for c in classrooms}
+    teachers = User.objects.filter(id__in=teacher_ids).only('id', 'username')
+    teacher_map = {str(u.id): u.username for u in teachers}
+
     result = []
-    for c in Classroom.objects.all():
-        try:
-            teacher = User.objects.get(id=c.teacher_id).username
-        except Exception:
-            teacher = '???'
+    for c in classrooms:
         d = _classroom_data(c)
-        d['teacher_name'] = teacher
+        d['teacher_name'] = teacher_map.get(str(c.teacher_id), '???')
         result.append(d)
     return Response(result)
 
@@ -1872,11 +1905,10 @@ def public_announcements(request):
         if request.user.is_superuser:
             user_role = 'ADMIN'
 
-    # Auto-delete broadcasts older than 30 days
+    # Only show announcements from the last 30 days
     cutoff = datetime.now() - timedelta(days=30)
-    GlobalAnnouncement.objects.filter(created_at__lt=cutoff).delete()
-
-    posts = GlobalAnnouncement.objects.all().order_by('-isPinned', '-created_at')
+    posts = GlobalAnnouncement.objects.filter(created_at__gte=cutoff).order_by('-isPinned', '-created_at')
+    
     result = []
     for p in posts:
         if p.targetRole == 'ALL' or p.targetRole == user_role:
@@ -2532,20 +2564,20 @@ def lock_tournament(request, tournament_id):
 def get_leaderboard(request):
     """GET /api/leaderboard/ — top students by XP."""
     limit = int(request.query_params.get('limit', 100))
-    profiles = CoderProfile.objects.filter(role='STUDENT').order_by('-xp')[:limit]
+    profiles = list(CoderProfile.objects.filter(role='STUDENT').order_by('-xp')[:limit])
     
+    # Batch fetch all usernames in one query
+    user_ids = [str(p.user_id) for p in profiles]
+    users = User.objects.filter(id__in=user_ids).only('id', 'username')
+    username_map = {str(u.id): u.username for u in users}
+
     leaderboard = []
     for i, p in enumerate(profiles):
-        try:
-            u = User.objects.get(id=p.user_id)
-            username = u.username
-        except User.DoesNotExist:
-            username = "???"
-            
+        uid_str = str(p.user_id)
         leaderboard.append({
             'rank': i + 1,
-            'user_id': p.user_id,
-            'username': username,
+            'user_id': uid_str,
+            'username': username_map.get(uid_str, "???"),
             'xp': p.xp,
             'level': p.level,
             'rank_name': p.rank
