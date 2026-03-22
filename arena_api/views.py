@@ -449,7 +449,7 @@ def classroom_detail(request, classroom_id):
                         'is_active':      getattr(s, 'is_active', True),
                         'created_at':     s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
                     }
-                    if matches_user:
+                    if is_teacher or matches_user:
                         sub_data['run_results'] = getattr(s, 'run_results', [])
                     
                     my_subs.append(sub_data)
@@ -900,6 +900,7 @@ def record_submission(request, task_id):
         review_status  = review_status,
         is_active      = True,
         status         = 'Submitted',
+        run_results    = run_results,
         last_edited_at = now,
         created_at     = now,
     )
