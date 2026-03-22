@@ -1959,6 +1959,22 @@ def _tournament_data(t):
             ],
         }
 
+    # Group matches into rounds for the bracket matrix
+    rounds_dict = {}
+    for m in t.matches:
+        rnum = m.round_num
+        if rnum not in rounds_dict:
+            rounds_dict[rnum] = []
+        rounds_dict[rnum].append(_match_data(m))
+    
+    # Convert to sorted list of round objects
+    sorted_rounds = []
+    for rnum in sorted(rounds_dict.keys()):
+        sorted_rounds.append({
+            'roundNumber': rnum,
+            'matches': rounds_dict[rnum]
+        })
+
     return {
         'id':                  str(t.id),
         'name':                t.name,
@@ -1969,6 +1985,7 @@ def _tournament_data(t):
         'participantIds':      list(t.participant_ids),
         'participantUsernames': dict(t.participant_usernames),
         'matches':             [_match_data(m) for m in t.matches],
+        'rounds':              sorted_rounds,
         'currentRound':        t.current_round,
         'status':              t.status,
         'winnerId':            t.winner_id,
@@ -2493,6 +2510,7 @@ def advance_tournament(request, tournament_id):
         # But create_tournament generates for max_players.
         pass
 
+    next_round = t.current_round + 1
     new_matches = _generate_round(
         winners,
         dict(t.participant_usernames),
